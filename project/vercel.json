@@ -1,0 +1,8 @@
+{
+  "rootDirectory": "project",
+  "builds": [
+    { "src": "project/vite.config.ts", "use": "@vercel/static-build" }
+  ],
+  "outputDirectory": "project/dist",
+  "routes": [{ "src": "/(.*)", "dest": "/" }]
+}

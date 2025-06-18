@@ -8,6 +8,7 @@ import {
   Globe,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import LoginForm from "../auth/LoginForm";
 
 const GuestDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -57,6 +58,16 @@ const GuestDashboard: React.FC = () => {
         "bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400",
     };
     return colors[color as keyof typeof colors] || colors.blue;
+  };
+  const goToLoginPage = () => {
+    return (
+      <LoginForm
+        onToggleForm={(form) => {
+          // Implement your navigation logic or state toggle here
+          console.log("Switching to form:", form);
+        }}
+      />
+    );
   };
 
   return (
@@ -137,7 +148,7 @@ const GuestDashboard: React.FC = () => {
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <button
-            onClick={() => navigate("/")}
+            onClick={goToLoginPage}
             className="bg-white text-blue-600 hover:bg-gray-100 font-semibold py-3 px-6 rounded-lg transition-colors"
           >
             Learn More About Programs

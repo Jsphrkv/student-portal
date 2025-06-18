@@ -42,13 +42,13 @@ const AppContent: React.FC = () => {
     return <AuthPage onGuestAccess={() => setShowGuestDashboard(true)} />;
   }
 
-  if (showGuestDashboard && !user) {
-    return (
-      <Layout>
-        <GuestDashboard />
-      </Layout>
-    );
-  }
+  // if (showGuestDashboard && !user) {
+  //   return (
+  //     <Layout>
+  //       <GuestDashboard />
+  //     </Layout>
+  //   );
+  // }
 
   return (
     <Layout>
@@ -64,7 +64,7 @@ const AppContent: React.FC = () => {
             <Route path="/support" element={<Support />} />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route
-              path="/loginForm"
+              path="/login"
               element={
                 <LoginPage
                   onToggleForm={(form) => {
@@ -96,6 +96,7 @@ const AppContent: React.FC = () => {
         )}
 
         <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="/guest" element={<GuestDashboard />} />
       </Routes>
     </Layout>
   );

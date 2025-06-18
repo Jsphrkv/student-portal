@@ -14,6 +14,7 @@ import {
 import { supabase } from "../../lib/supabase";
 // import { v4 as uuidv4 } from "uuid";
 import { useNavigate } from "react-router-dom";
+import { LoginData } from "../types"; // Adjust the import path as necessary
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -38,8 +39,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const clearError = () => setError(null);
 
   const navigate = useNavigate();
-
-  const login = async (email: string, password: string) => {
+  const login = async ({ email, password }: LoginData): Promise<void> => {
     setIsLoading(true);
     setError(null);
 

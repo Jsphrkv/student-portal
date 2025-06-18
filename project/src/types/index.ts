@@ -75,7 +75,6 @@ export interface Announcement {
   content: string;
   created_at: string;
 }
-
 export interface AuditLog {
   id: string;
   user_id: string;
@@ -83,13 +82,14 @@ export interface AuditLog {
   action_type: string;
   table_affected: string;
   record_id: string | null;
-  old_values: any | null;
-  new_values: any | null;
+  old_values: Record<string, unknown> | null;
+  new_values: Record<string, unknown> | null;
   created_at: string;
 }
 
 export interface AuthContextType {
   user: User | null;
+  student: Student | null;
   isLoading: boolean;
   error: string | null;
   login: (data: LoginData) => Promise<void>;

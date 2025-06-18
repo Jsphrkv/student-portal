@@ -15,7 +15,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onToggleForm }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await login(email, password);
+      await login({ email, password });
     } catch (error) {
       console.log(error);
     }

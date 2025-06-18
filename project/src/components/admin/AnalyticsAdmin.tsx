@@ -20,7 +20,6 @@ import {
   DollarSign,
   TrendingUp,
   BookOpen,
-  Award,
   AlertTriangle,
   AlertCircle,
 } from "lucide-react";
@@ -38,15 +37,15 @@ interface AnalyticsData {
     name: string;
     value: string;
     change: string;
-    changeType: "increase" | "decrease";
-    icon: React.ComponentType;
+    changeType: "increase" | "decrease" | "neutral";
+    icon: React.ComponentType<{ className?: string }>;
     color: string;
   }[];
   recentActivities: {
     type: string;
     message: string;
     time: string;
-    icon: React.ComponentType;
+    icon: React.ComponentType<{ className?: string }>;
   }[];
 }
 
@@ -214,8 +213,12 @@ const AnalyticsAdmin: React.FC = () => {
         };
 
         setData(analyticsData);
-      } catch (err) {
-        setError(err.message);
+      } catch (err: unknown) {
+        if (err instanceof Error) {
+          setError(err.message);
+        } else {
+          setError("Unexpected error");
+        }
         console.error("Error fetching analytics:", err);
       } finally {
         setIsLoading(false);

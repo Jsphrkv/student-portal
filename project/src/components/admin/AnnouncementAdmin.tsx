@@ -194,8 +194,12 @@ const AnnouncementAdmin: React.FC = () => {
       }
 
       handleCloseModal();
-    } catch (err) {
-      setError(err.message);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Unexpected error");
+      }
       console.error("Error saving announcement:", err);
     }
   };
@@ -219,8 +223,12 @@ const AnnouncementAdmin: React.FC = () => {
           .eq("id", id);
 
         if (error) throw error;
-      } catch (err) {
-        setError(err.message);
+      } catch (err: unknown) {
+        if (err instanceof Error) {
+          setError(err.message);
+        } else {
+          setError("Unexpected error");
+        }
       }
     }
   };

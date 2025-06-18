@@ -12,7 +12,7 @@ import {
   AuthContextType,
 } from "../types";
 import { supabase } from "../../lib/supabase";
-import { v4 as uuidv4 } from "uuid";
+// import { v4 as uuidv4 } from "uuid";
 import { useNavigate } from "react-router-dom";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -99,8 +99,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           navigate("/dashboard");
         }
       }
-    } catch (err: any) {
-      setError(err.message || "Login failed");
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message || "Login failed");
+      } else {
+        setError("Unexpected error");
+      }
       throw err;
     } finally {
       setIsLoading(false);
@@ -163,6 +167,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         const userData: User = {
           id: data.user.id,
           email: data.user.email!,
+          first_name: insertedUser.first_name,
+          last_name: insertedUser.last_name,
           role: "student",
           created_at: data.user.created_at,
         };
@@ -170,8 +176,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUser(userData);
         setStudent(studentProfile);
       }
-    } catch (err: any) {
-      setError(err.message || "Registration failed");
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message || "Registration failed");
+      } else {
+        setError("Unexpected error");
+      }
       throw err;
     } finally {
       setIsLoading(false);
@@ -185,8 +195,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       await supabase.auth.signOut();
       setUser(null);
       setStudent(null);
-    } catch (err: any) {
-      setError(err.message || "Logout failed");
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        console.error(err.message);
+      } else {
+        console.error("Unexpected error", err);
+      }
     } finally {
       setIsLoading(false);
     }

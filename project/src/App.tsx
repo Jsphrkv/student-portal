@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -9,7 +9,6 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Layout from "./components/layout/Layout";
 import AuthPage from "./components/auth/AuthPage";
-import LoginPage from "./components/auth/LoginForm";
 import StudentDashboard from "./components/student/StudentDashboard";
 import AdminDashboard from "./components/admin/AdminDashboard";
 import Students from "./components/admin/Students";
@@ -45,20 +44,7 @@ const AppContent: React.FC = () => {
     );
   }
 
-  // if (!user && !showGuestDashboard) {
-  //   return <AuthPage onGuestAccess={() => setShowGuestDashboard(true)} />;
-  // }
-
-  if (showGuestDashboard && !user) {
-    return (
-      <Layout>
-        <GuestDashboard />
-      </Layout>
-    );
-  }
-
   return (
-<<<<<<< HEAD
     <ThemeProvider>
       <Layout>
         <Routes>
@@ -111,55 +97,6 @@ const AppContent: React.FC = () => {
         </Routes>
       </Layout>
     </ThemeProvider>
-=======
-    <Layout>
-      <Routes>
-        {user?.role === "student" && (
-          <>
-            <Route path="/dashboard" element={<StudentDashboard />} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/academics" element={<AcademicRecords />} />
-            <Route path="/enrollment" element={<EnrollmentStatus />} />
-            <Route path="/financial" element={<Financial />} />
-            <Route path="/announcement" element={<Announcement />} />
-            <Route path="/support" element={<Support />} />
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route
-              path="/loginForm"
-              element={
-                <LoginPage
-                  onToggleForm={(form) => {
-                    // Implement your navigation logic or state toggle here
-                    console.log("Switching to form:", form);
-                  }}
-                />
-              }
-            />
-          </>
-        )}
-
-        {user?.role === "admin" && (
-          <>
-            <Route path="/admin/dashboard" element={<AdminDashboard />} />
-            <Route path="/admin/students" element={<Students />} />
-            <Route
-              path="/admin/announcementAdmin"
-              element={<AnnouncementAdmin />}
-            />
-            <Route path="/admin/financialAdmin" element={<FinancialAdmin />} />
-            <Route path="/admin/supportAdmin" element={<SupportAdmin />} />
-            <Route path="/admin/analyticsAdmin" element={<AnalyticsAdmin />} />
-            <Route
-              path="/"
-              element={<Navigate to="/admin/dashboard" replace />}
-            />
-          </>
-        )}
-
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Layout>
->>>>>>> parent of de12231 (First commit)
   );
 };
 function App() {

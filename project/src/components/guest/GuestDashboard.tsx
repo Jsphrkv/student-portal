@@ -58,12 +58,9 @@ const GuestDashboard: React.FC = () => {
     };
     return colors[color as keyof typeof colors] || colors.blue;
   };
-<<<<<<< HEAD
   const goToLoginPage = () => {
     navigate("/login");
   };
-=======
->>>>>>> parent of de12231 (First commit)
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
@@ -143,7 +140,7 @@ const GuestDashboard: React.FC = () => {
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <button
-            onClick={() => navigate("/")}
+            onClick={goToLoginPage}
             className="bg-white text-blue-600 hover:bg-gray-100 font-semibold py-3 px-6 rounded-lg transition-colors"
           >
             Learn More About Programs

@@ -49,15 +49,16 @@ const AppContent: React.FC = () => {
   //   return <AuthPage onGuestAccess={() => setShowGuestDashboard(true)} />;
   // }
 
-  // if (showGuestDashboard && !user) {
-  //   return (
-  //     <Layout>
-  //       <GuestDashboard />
-  //     </Layout>
-  //   );
-  // }
+  if (showGuestDashboard && !user) {
+    return (
+      <Layout>
+        <GuestDashboard />
+      </Layout>
+    );
+  }
 
   return (
+<<<<<<< HEAD
     <ThemeProvider>
       <Layout>
         <Routes>
@@ -110,6 +111,55 @@ const AppContent: React.FC = () => {
         </Routes>
       </Layout>
     </ThemeProvider>
+=======
+    <Layout>
+      <Routes>
+        {user?.role === "student" && (
+          <>
+            <Route path="/dashboard" element={<StudentDashboard />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/academics" element={<AcademicRecords />} />
+            <Route path="/enrollment" element={<EnrollmentStatus />} />
+            <Route path="/financial" element={<Financial />} />
+            <Route path="/announcement" element={<Announcement />} />
+            <Route path="/support" element={<Support />} />
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route
+              path="/loginForm"
+              element={
+                <LoginPage
+                  onToggleForm={(form) => {
+                    // Implement your navigation logic or state toggle here
+                    console.log("Switching to form:", form);
+                  }}
+                />
+              }
+            />
+          </>
+        )}
+
+        {user?.role === "admin" && (
+          <>
+            <Route path="/admin/dashboard" element={<AdminDashboard />} />
+            <Route path="/admin/students" element={<Students />} />
+            <Route
+              path="/admin/announcementAdmin"
+              element={<AnnouncementAdmin />}
+            />
+            <Route path="/admin/financialAdmin" element={<FinancialAdmin />} />
+            <Route path="/admin/supportAdmin" element={<SupportAdmin />} />
+            <Route path="/admin/analyticsAdmin" element={<AnalyticsAdmin />} />
+            <Route
+              path="/"
+              element={<Navigate to="/admin/dashboard" replace />}
+            />
+          </>
+        )}
+
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Layout>
+>>>>>>> parent of de12231 (First commit)
   );
 };
 function App() {

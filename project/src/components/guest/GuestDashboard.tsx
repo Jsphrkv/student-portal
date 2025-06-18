@@ -8,7 +8,6 @@ import {
   Globe,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import LoginForm from "../auth/LoginForm";
 
 const GuestDashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -59,9 +58,12 @@ const GuestDashboard: React.FC = () => {
     };
     return colors[color as keyof typeof colors] || colors.blue;
   };
+<<<<<<< HEAD
   const goToLoginPage = () => {
     navigate("/login");
   };
+=======
+>>>>>>> parent of de12231 (First commit)
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
@@ -141,7 +143,7 @@ const GuestDashboard: React.FC = () => {
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <button
-            onClick={goToLoginPage}
+            onClick={() => navigate("/")}
             className="bg-white text-blue-600 hover:bg-gray-100 font-semibold py-3 px-6 rounded-lg transition-colors"
           >
             Learn More About Programs

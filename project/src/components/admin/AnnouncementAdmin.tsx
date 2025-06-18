@@ -70,16 +70,16 @@ const AnnouncementAdmin: React.FC = () => {
         setAnnouncements(announcementsWithAuthors || []);
 
         // If admin, fetch additional data like views or statistics
-        if (isAdmin) {
-          const { data: stats, error: statsError } = await supabase
-            .from("announcement_stats")
-            .select("*")
-            .in("announcement_id", announcements?.map((a) => a.id) || []);
+        // if (isAdmin) {
+        //   const { data: stats, error: statsError } = await supabase
+        //     .from("announcement_stats")
+        //     .select("*")
+        //     .in("announcement_id", announcements?.map((a) => a.id) || []);
 
-          if (!statsError) {
-            // Process stats if needed
-          }
-        }
+        //   if (!statsError) {
+        //     // Process stats if needed
+        //   }
+        // }
       } catch (error) {
         console.error("Error fetching announcements:", error);
         setError("Failed to load announcements.");
@@ -144,38 +144,59 @@ const AnnouncementAdmin: React.FC = () => {
 
     try {
       if (editingAnnouncement) {
-        // Update existing announcement in Supabase
-        const { data, error } = await supabase
+        // UPDATE existing announcement
+        const { error } = await supabase
           .from("announcements")
           .update({
             title: formData.title,
             content: formData.content,
             priority: formData.priority,
+            // Only update author if it's changed (optional)
+            ...(user && {
+              author: `${user.first_name} ${user.last_name}`,
+              user_id: user.id,
+            }),
           })
-          .eq("id", editingAnnouncement.id)
-          .select();
+          .eq("id", editingAnnouncement.id);
 
         if (error) throw error;
+
+        // Optional: Fetch the updated announcement if needed
+        const { data: updatedAnnouncement } = await supabase
+          .from("announcements")
+          .select("*")
+          .eq("id", editingAnnouncement.id)
+          .single();
+
+        // Update local state if using one
+        setAnnouncements((prev) =>
+          prev.map((ann) =>
+            ann.id === editingAnnouncement.id ? updatedAnnouncement : ann
+          )
+        );
       } else {
-        // Create new announcement in Supabase
+        // CREATE new announcement
         const { data, error } = await supabase
           .from("announcements")
-          .insert([
-            {
-              title: formData.title,
-              content: formData.content,
-              priority: formData.priority,
-              author: `${user?.first_name} ${user?.last_name}` || "Admin",
-            },
-          ])
+          .insert({
+            title: formData.title,
+            content: formData.content,
+            priority: formData.priority,
+            user_id: user?.id,
+            author: user ? `${user.first_name} ${user.last_name}` : "Admin",
+          })
           .select();
 
         if (error) throw error;
+
+        // Update local state if using one
+        setAnnouncements((prev) => [data[0], ...prev]);
       }
 
       handleCloseModal();
     } catch (err) {
       setError(err.message);
+      console.error("Error saving announcement:", err);
     }
   };
 

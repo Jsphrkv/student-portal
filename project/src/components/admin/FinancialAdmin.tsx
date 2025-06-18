@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import LoadingSpinner from "../shared/LoadingSpinner";
+import { v4 as uuidv4 } from "uuid";
 
 interface Payment {
   id: number;
@@ -25,7 +26,7 @@ interface Payment {
   status: "paid" | "pending" | "overdue";
   semester: string;
   type: string;
-  year_level?: string;
+  year?: string;
   section?: string;
   student_id?: string;
 }
@@ -44,13 +45,13 @@ const FinancialAdmin: React.FC = () => {
     due_date: "",
     semester: "",
     type: "",
-    year_level: "",
+    year: "",
     section: "",
   });
   const [showYearSelection, setShowYearSelection] = useState(false);
   const [showSectionSelection, setShowSectionSelection] = useState(false);
 
-  const years = ["1st Year", "2nd Year", "3rd Year"];
+  const years = ["All Years", "1st Year", "2nd Year", "3rd Year"];
   const sections = ["A-AM", "A-PM", "B", "C"];
 
   useEffect(() => {
@@ -102,9 +103,15 @@ const FinancialAdmin: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    console.log(
+      "Billing filter → year:",
+      formData.year,
+      "| section:",
+      formData.section
+    );
+
     try {
       if (editingPayment) {
-        // Update existing payment
         const { error } = await supabase
           .from("payments")
           .update({
@@ -118,26 +125,41 @@ const FinancialAdmin: React.FC = () => {
 
         if (error) throw error;
       } else {
-        // Add new payment
-        const paymentData = {
+        // Fetch students by year level and section
+        const { data: students, error: studentError } = await supabase
+          .from("student") // ✅ correct table name
+          .select("id") // ✅ student.id
+          .eq("year", formData.year)
+          .eq("section", formData.section);
+
+        if (studentError) throw studentError;
+        if (!students || students.length === 0)
+          throw new Error("No students found for the selected level/section");
+
+        const newId = uuidv4();
+        const paymentsToInsert = students.map((student) => ({
+          id: newId,
+          student_id: student.id,
           description: formData.description,
           amount: parseFloat(formData.amount),
           due_date: formData.due_date,
           status: "pending" as const,
           semester: formData.semester,
-          type: formData.type,
-          year_level: formData.year_level,
+          billing_type: formData.type,
+          year_level: formData.year,
           section: formData.section,
-        };
+        }));
 
-        const { error } = await supabase.from("payments").insert(paymentData);
-        if (error) throw error;
+        const { error: insertError } = await supabase
+          .from("payments")
+          .insert(paymentsToInsert);
+        if (insertError) throw insertError;
       }
 
       await fetchPayments();
       handleCloseModal();
-    } catch (error) {
-      console.error("Error saving payment:", error);
+    } catch (error: any) {
+      console.error("Error saving payment:", error.message);
     }
   };
 
@@ -181,7 +203,7 @@ const FinancialAdmin: React.FC = () => {
       due_date: "",
       semester: "",
       type: "",
-      year_level: "",
+      year: "",
       section: "",
     });
     setShowYearSelection(false);
@@ -403,8 +425,7 @@ const FinancialAdmin: React.FC = () => {
                   {isAdmin && (
                     <>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                        {payment.year_level || "All"} /{" "}
-                        {payment.section || "All"}
+                        {payment.year || "All"} / {payment.section || "All"}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex items-center space-x-2">
@@ -425,7 +446,7 @@ const FinancialAdmin: React.FC = () => {
                                 due_date: payment.due_date,
                                 semester: payment.semester,
                                 type: payment.type,
-                                year_level: payment.year_level || "",
+                                year: payment.year || "",
                                 section: payment.section || "",
                               });
                               setIsModalOpen(true);
@@ -577,7 +598,7 @@ const FinancialAdmin: React.FC = () => {
                             }}
                             className="flex items-center px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                           >
-                            <span>Year: {formData.year_level || "All"}</span>
+                            <span>Year: {formData.year || "All"}</span>
                             {showYearSelection ? (
                               <ChevronUp className="h-4 w-4 ml-2" />
                             ) : (
@@ -604,23 +625,6 @@ const FinancialAdmin: React.FC = () => {
 
                         {showYearSelection && (
                           <div className="grid grid-cols-3 gap-2 p-2 bg-gray-50 dark:bg-gray-700 rounded-md">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setFormData((prev) => ({
-                                  ...prev,
-                                  year_level: "",
-                                }));
-                                setShowYearSelection(false);
-                              }}
-                              className={`px-3 py-1 text-sm rounded ${
-                                !formData.year_level
-                                  ? "bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200"
-                                  : "bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500"
-                              }`}
-                            >
-                              All Years
-                            </button>
                             {years.map((year) => (
                               <button
                                 key={year}
@@ -628,12 +632,12 @@ const FinancialAdmin: React.FC = () => {
                                 onClick={() => {
                                   setFormData((prev) => ({
                                     ...prev,
-                                    year_level: year,
+                                    year: year,
                                   }));
                                   setShowYearSelection(false);
                                 }}
                                 className={`px-3 py-1 text-sm rounded ${
-                                  formData.year_level === year
+                                  formData.year === year
                                     ? "bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200"
                                     : "bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500"
                                 }`}
@@ -699,7 +703,7 @@ const FinancialAdmin: React.FC = () => {
                     type="submit"
                     className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-blue-700 rounded-md hover:bg-blue-700 dark:hover:bg-blue-800 transition-colors"
                   >
-                    {editingPayment ? "Update" : "Add Billing"}
+                    {editingPayment ? "Update" : "Submit Billing"}
                   </button>
                 </div>
               </form>

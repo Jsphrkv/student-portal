@@ -82,8 +82,8 @@ const AdminDashboard: React.FC = () => {
           supabase
             .from("payments")
             .select("amount")
-            .gte("payment_date", firstDayOfMonth.toISOString())
-            .eq("status", "completed"),
+            .gte("paid_date", firstDayOfMonth.toISOString())
+            .eq("status", "paid"),
 
           // Recent payments (last 7 days)
           supabase
@@ -103,10 +103,10 @@ const AdminDashboard: React.FC = () => {
             .limit(5),
 
           // Add in your Promise.all list:
-          supabase.from("issues").select("*", { count: "exact", head: true }),
+          supabase.from("issue").select("*", { count: "exact", head: true }),
 
           // Pending tasks (example: unprocessed payments)
-          supabase.from("payments").select("*").is("processed", false).limit(4),
+          supabase.from("payments").select("*").eq("status", "paid").limit(4),
         ]);
 
         // Calculate trends (simplified example)
@@ -332,7 +332,7 @@ const AdminDashboard: React.FC = () => {
           <div className="p-6 border-b border-gray-200 dark:border-gray-700">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
               <AlertTriangle className="h-5 w-5 mr-2 text-yellow-600 dark:text-yellow-400" />
-              Pending Tasks
+              Pending Issues
             </h2>
           </div>
           <div className="p-6">
@@ -391,7 +391,7 @@ const AdminDashboard: React.FC = () => {
           <button className="p-4 bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/30 rounded-lg transition-colors group">
             <FileText className="h-6 w-6 text-purple-600 dark:text-purple-400 mb-2" />
             <p className="text-sm font-medium text-purple-600 dark:text-purple-400">
-              Generate Reports
+              Announcements
             </p>
           </button>
         </div>

@@ -13,6 +13,7 @@ import {
 } from "../types";
 import { supabase } from "../../lib/supabase";
 import { v4 as uuidv4 } from "uuid";
+import { useNavigate } from "react-router-dom";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -35,6 +36,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [error, setError] = useState<string | null>(null);
 
   const clearError = () => setError(null);
+
+  const navigate = useNavigate();
 
   const login = async (email: string, password: string) => {
     setIsLoading(true);
@@ -62,6 +65,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
         const userData: User = {
           id: userProfile.id,
+          first_name: userProfile.first_name,
+          last_name: userProfile.last_name,
           email: userProfile.email,
           role: userProfile.role,
           created_at: userProfile.created_at,
@@ -82,6 +87,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           } else {
             setStudent(studentData);
           }
+        }
+
+        const currentPath = window.location.pathname;
+        if (userProfile.role === "admin" && !currentPath.startsWith("/admin")) {
+          navigate("/admin/dashboard");
+        } else if (
+          userProfile.role === "student" &&
+          currentPath !== "/dashboard"
+        ) {
+          navigate("/dashboard");
         }
       }
     } catch (err: any) {
@@ -196,6 +211,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           const userData: User = {
             id: userProfile.id,
             email: userProfile.email,
+            first_name: userProfile.first_name,
+            last_name: userProfile.last_name,
             role: userProfile.role,
             created_at: userProfile.created_at,
           };

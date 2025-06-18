@@ -60,14 +60,7 @@ const GuestDashboard: React.FC = () => {
     return colors[color as keyof typeof colors] || colors.blue;
   };
   const goToLoginPage = () => {
-    return (
-      <LoginForm
-        onToggleForm={(form) => {
-          // Implement your navigation logic or state toggle here
-          console.log("Switching to form:", form);
-        }}
-      />
-    );
+    navigate("/login");
   };
 
   return (

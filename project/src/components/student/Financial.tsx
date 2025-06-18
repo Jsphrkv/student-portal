@@ -17,7 +17,7 @@ interface Payment {
   type: string;
   amount: number;
   due_date: string;
-  status: "pending" | "completed" | "overdue";
+  status: "pending" | "paid" | "overdue";
   description: string;
   paid_date?: string;
   created_at: string;
@@ -49,10 +49,8 @@ const Financial: React.FC = () => {
         if (paymentsError) throw paymentsError;
 
         // Separate into outstanding payments and payment history
-        const outstanding = paymentsData.filter(
-          (p) => p.status !== "completed"
-        );
-        const history = paymentsData.filter((p) => p.status === "completed");
+        const outstanding = paymentsData.filter((p) => p.status !== "paid");
+        const history = paymentsData.filter((p) => p.status === "paid");
 
         setPayments(outstanding);
         setPaymentHistory(history);
@@ -69,7 +67,7 @@ const Financial: React.FC = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "completed":
+      case "paid":
         return "text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20";
       case "pending":
         return "text-yellow-600 dark:text-yellow-400 bg-yellow-50 dark:bg-yellow-900/20";
@@ -82,7 +80,7 @@ const Financial: React.FC = () => {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case "completed":
+      case "paid":
         return <CheckCircle className="h-4 w-4" />;
       case "pending":
         return <Clock className="h-4 w-4" />;
@@ -93,10 +91,14 @@ const Financial: React.FC = () => {
     }
   };
 
-  const totalOwed = payments.reduce((sum, p) => sum + p.amount, 0);
+  const today = new Date();
+
   const overdueAmount = payments
-    .filter((p) => p.status === "overdue")
+    .filter((p) => !p.paid_date && new Date(p.due_date) < today)
     .reduce((sum, p) => sum + p.amount, 0);
+
+  const totalOwed = payments.reduce((sum, p) => sum + p.amount, 0);
+
   const nextDueDate =
     payments.length > 0
       ? new Date(payments[0].due_date).toLocaleDateString("en-US", {
@@ -112,7 +114,7 @@ const Financial: React.FC = () => {
       const { error } = await supabase
         .from("payments")
         .update({
-          status: "completed",
+          status: "paid",
           paid_date: new Date().toISOString(),
         })
         .eq("id", paymentId);
@@ -127,7 +129,7 @@ const Financial: React.FC = () => {
           ...paymentHistory,
           {
             ...payment,
-            status: "completed",
+            status: "paid",
             paid_date: new Date().toISOString(),
           },
         ]);

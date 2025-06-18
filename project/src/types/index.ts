@@ -4,9 +4,9 @@ export interface User {
   first_name: string;
   last_name: string;
   role: string;
-  avatar?: string;
+  // avatar?: string;
   created_at: string;
-  last_login?: string;
+  // last_login?: string;
 }
 
 export interface Student {
@@ -97,7 +97,6 @@ export interface AuthContextType {
   logout: () => Promise<void>;
   clearError: () => void;
 }
-
 
 export interface StudentRegistrationData {
   first_name: string;

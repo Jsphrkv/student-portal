@@ -7,7 +7,7 @@ import {
   //   Clock,
   //   MessageCircle,
   //   Send,
-  //   Search,
+  Search,
   //   ChevronDown,
   //   ChevronUp,
   Trash2,
@@ -26,7 +26,7 @@ interface SupportTicket {
   email: string;
   subject: string;
   message: string;
-  status: "pending" | "resolved" | "rejected";
+  status: "in_progress" | "resolved" | "rejected" | "open";
   response?: string;
   resolved_by?: string;
 }
@@ -35,14 +35,18 @@ const SupportAdmin: React.FC = () => {
   const { user } = useAuth();
   const [requests, setRequests] = useState<SupportTicket[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // const [resolve, setResolve] = useState(false);
+  const [responseMode, setResponseMode] = useState(false);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(
     null
   );
+
   const [responseText, setResponseText] = useState("");
   const [activeTab, setActiveTab] = useState<
-    "pending" | "resolved" | "rejected" | "all"
-  >("pending");
+    "in_progress" | "resolved" | "rejected" | "all" | "open"
+  >("in_progress");
 
   useEffect(() => {
     fetchTickets();
@@ -91,7 +95,8 @@ const SupportAdmin: React.FC = () => {
 
   const handleRespond = async (
     ticketId: number,
-    status: "resolved" | "rejected"
+    status: "resolved" | "rejected",
+    responseText: string
   ) => {
     try {
       const { error } = await supabase
@@ -139,7 +144,7 @@ const SupportAdmin: React.FC = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "pending":
+      case "in_progress":
         return "bg-yellow-100 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-200";
       case "resolved":
         return "bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-200";
@@ -152,7 +157,7 @@ const SupportAdmin: React.FC = () => {
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case "pending":
+      case "in_progress":
         return <AlertCircle className="h-4 w-4" />;
       case "resolved":
         return <Check className="h-4 w-4" />;
@@ -194,14 +199,14 @@ const SupportAdmin: React.FC = () => {
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
         <div className="flex space-x-4">
           <button
-            onClick={() => setActiveTab("pending")}
+            onClick={() => setActiveTab("in_progress")}
             className={`px-4 py-2 text-sm font-medium rounded-md ${
-              activeTab === "pending"
+              activeTab === "in_progress"
                 ? "bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200"
                 : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
             }`}
           >
-            Pending
+            In Progress
           </button>
           <button
             onClick={() => setActiveTab("resolved")}
@@ -306,13 +311,27 @@ const SupportAdmin: React.FC = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex items-center space-x-2">
                       <button
-                        onClick={() => setSelectedTicket(ticket)}
+                        onClick={() => {
+                          setSelectedTicket(ticket);
+                          setResponseMode(false);
+                        }}
                         className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors"
                       >
                         View
                       </button>
                       <button
-                        onClick={() => handleDelete(ticket.id)}
+                        onClick={() => {
+                          setResponseMode(true);
+                          setSelectedTicket(ticket);
+                        }}
+                        className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors"
+                      >
+                        Resolve
+                      </button>
+                      <button
+                        onClick={() => {
+                          handleDelete(ticket.id);
+                        }}
                         className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 transition-colors"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -398,20 +417,7 @@ const SupportAdmin: React.FC = () => {
                   </div>
                 </div>
 
-                {selectedTicket.response && (
-                  <div>
-                    <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                      Admin Response
-                    </p>
-                    <div className="mt-1 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-md">
-                      <p className="text-gray-900 dark:text-white whitespace-pre-line">
-                        {selectedTicket.response}
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {selectedTicket.status === "pending" && (
+                {selectedTicket.status === "in_progress" && responseMode && (
                   <div>
                     <label
                       htmlFor="response"
@@ -432,7 +438,11 @@ const SupportAdmin: React.FC = () => {
                       <button
                         type="button"
                         onClick={() =>
-                          handleRespond(selectedTicket.id, "rejected")
+                          handleRespond(
+                            selectedTicket.id,
+                            "rejected",
+                            responseText
+                          )
                         }
                         className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 transition-colors"
                       >
@@ -441,7 +451,11 @@ const SupportAdmin: React.FC = () => {
                       <button
                         type="button"
                         onClick={() =>
-                          handleRespond(selectedTicket.id, "resolved")
+                          handleRespond(
+                            selectedTicket.id,
+                            "resolved",
+                            responseText
+                          )
                         }
                         className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors"
                       >

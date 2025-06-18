@@ -34,10 +34,14 @@ const Sidebar: React.FC = () => {
     { to: "/admin/dashboard", icon: Home, label: "Dashboard" },
     { to: "/admin/students", icon: Users, label: "Students" },
     { to: "admin/announcementAdmin", icon: FileText, label: "Announcements" },
-    { to: "/admin/AnalyticsAdmin", icon: BarChart3, label: "Academics" },
-    { to: "/admin/financialAdmin", icon: DollarSign, label: "Financial" },
+    { to: "/admin/AnalyticsAdmin", icon: BarChart3, label: "Analytics" },
+    {
+      to: "/admin/financialAdmin",
+      icon: DollarSign,
+      label: "Payment Management",
+    },
     // { to: "/admin/settings", icon: Settings, label: "Settings" },
-    { to: "/admin/audit", icon: Activity, label: "Audit Trail" },
+    { to: "/admin/AuditLogs", icon: Activity, label: "Audit Trail" },
     { to: "admin/supportAdmin", icon: HelpCircle, label: "Support" },
   ];
 

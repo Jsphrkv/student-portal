@@ -189,7 +189,7 @@ const Students: React.FC = () => {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          Admin Dashboard
+          Students List
         </h1>
         <p className="text-gray-600 dark:text-gray-400 mt-2">
           View student data by year and section

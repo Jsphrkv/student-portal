@@ -2,8 +2,13 @@ import React, { useEffect, useState } from "react";
 import { User, Mail, Phone, MapPin, Heart, Save, Edit3 } from "lucide-react";
 import { supabase } from "../../../lib/supabase"; // Make sure this is properly initialized
 
+interface Users {
+  id?: string;
+}
+
 const Profile: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
+  const [user, setUser] = useState<Users | null>(null);
   const [formData, setFormData] = useState({
     student_id: "",
     firstName: "",
@@ -11,17 +16,34 @@ const Profile: React.FC = () => {
     email: "",
     phone: "",
     address: "",
-    emergencyContact: {
-      name: "",
-      phone: "",
-      relationship: "",
-    },
+    emergency_contact_name: "",
+    emergency_contact_number: "",
+    emergency_contact_relationship: "",
   });
 
   const handleSave = () => {
     // API call to save profile data
+    supabase
+      .from("student")
+      .update({
+        contact: formData.phone,
+        address: formData.address,
+        emergency_contact_name: formData.emergency_contact_name,
+        emergency_contact_number: formData.emergency_contact_number,
+        emergency_contact_relationship: formData.emergency_contact_relationship,
+      })
+      .eq("id", user ? user.id : "")
+      .then(({ error }) => {
+        if (error) {
+          console.error("Error updating student info:", error.message);
+        } else {
+          console.log("Profile updated successfully");
+        }
+      });
+
     setIsEditing(false);
   };
+
   useEffect(() => {
     const fetchStudentInfo = async () => {
       const {
@@ -33,6 +55,8 @@ const Profile: React.FC = () => {
         console.error("User not logged in or auth error:", authError?.message);
         return;
       }
+
+      setUser(user);
 
       const userId = user.id;
       // Fetch from student table
@@ -67,11 +91,10 @@ const Profile: React.FC = () => {
         email: userData.email,
         phone: studentData.contact,
         address: studentData.address || "",
-        emergencyContact: {
-          name: studentData.emergency_contact_name || "",
-          phone: studentData.emergency_contact_phone || "",
-          relationship: studentData.emergency_contact_relationship || "",
-        },
+        emergency_contact_name: studentData.emergency_contact_name || "",
+        emergency_contact_number: studentData.emergency_contact_number || "",
+        emergency_contact_relationship:
+          studentData.emergency_contact_relationship || "",
       });
     };
 
@@ -80,18 +103,7 @@ const Profile: React.FC = () => {
   // <- Add dependency array to avoid infinite loop
 
   const handleInputChange = (field: string, value: string) => {
-    if (field.startsWith("emergencyContact.")) {
-      const emergencyField = field.split(".")[1];
-      setFormData((prev) => ({
-        ...prev,
-        emergencyContact: {
-          ...prev.emergencyContact,
-          [emergencyField]: value,
-        },
-      }));
-    } else {
-      setFormData((prev) => ({ ...prev, [field]: value }));
-    }
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   return (
@@ -270,15 +282,18 @@ const Profile: React.FC = () => {
                 {isEditing ? (
                   <input
                     type="text"
-                    value={formData.emergencyContact.name}
+                    value={formData.emergency_contact_name}
                     onChange={(e) =>
-                      handleInputChange("emergencyContact.name", e.target.value)
+                      handleInputChange(
+                        "emergency_contact_name",
+                        e.target.value
+                      )
                     }
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   />
                 ) : (
                   <p className="text-gray-900 dark:text-white">
-                    {formData.emergencyContact.name}
+                    {formData.emergency_contact_name}
                   </p>
                 )}
               </div>
@@ -291,10 +306,10 @@ const Profile: React.FC = () => {
                   {isEditing ? (
                     <input
                       type="tel"
-                      value={formData.emergencyContact.phone}
+                      value={formData.emergency_contact_number}
                       onChange={(e) =>
                         handleInputChange(
-                          "emergencyContact.phone",
+                          "emergency_contact_number",
                           e.target.value
                         )
                       }
@@ -302,7 +317,7 @@ const Profile: React.FC = () => {
                     />
                   ) : (
                     <p className="text-gray-900 dark:text-white">
-                      {formData.emergencyContact.phone}
+                      {formData.emergency_contact_number}
                     </p>
                   )}
                 </div>
@@ -314,10 +329,10 @@ const Profile: React.FC = () => {
                   {isEditing ? (
                     <input
                       type="text"
-                      value={formData.emergencyContact.relationship}
+                      value={formData.emergency_contact_relationship}
                       onChange={(e) =>
                         handleInputChange(
-                          "emergencyContact.relationship",
+                          "emergency_contact_relationship",
                           e.target.value
                         )
                       }
@@ -325,7 +340,7 @@ const Profile: React.FC = () => {
                     />
                   ) : (
                     <p className="text-gray-900 dark:text-white">
-                      {formData.emergencyContact.relationship}
+                      {formData.emergency_contact_relationship}
                     </p>
                   )}
                 </div>

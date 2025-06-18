@@ -22,6 +22,7 @@ import {
   BookOpen,
   Award,
   AlertTriangle,
+  AlertCircle,
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import LoadingSpinner from "../shared/LoadingSpinner";
@@ -62,104 +63,112 @@ const AnalyticsAdmin: React.FC = () => {
         // Fetch all data in parallel
         const [
           { data: enrollment },
-          { data: departments },
           { data: grades },
           { data: payments },
-          { data: yearLevels },
+          { data: students },
         ] = await Promise.all([
           supabase
-            .from("enrollment_trends")
+            .from("enrollments")
             .select("*")
             .order("semester", { ascending: true }),
-          supabase.from("department_distribution").select("*"),
-          supabase.from("grade_distribution").select("*"),
+          supabase.from("grades").select("*"),
           supabase
-            .from("payment_analytics")
+            .from("payments")
             .select("*")
-            .order("month", { ascending: true }),
-          supabase.from("gender_distribution").select("*"),
+            .order("paid_date", { ascending: true }),
+          supabase.from("student").select("id, year"),
         ]);
+
+        // Calculate year level distribution from students data
+        const yearLevelDistribution = students?.reduce((acc, student) => {
+          const yearLevel = student.year || "Unknown";
+          acc[yearLevel] = (acc[yearLevel] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>);
 
         // Transform data to match our format
         const analyticsData: AnalyticsData = {
           enrollmentData:
             enrollment?.map((item) => ({
               semester: item.semester,
-              students: item.students,
+              students: item.student_count,
             })) || [],
 
-          departmentData:
-            departments?.map((dept, index) => ({
-              name: dept.department_name,
-              students: dept.student_count,
-              color: [
-                "#3B82F6", // blue
-                "#10B981", // green
-                "#F59E0B", // yellow
-                "#EF4444", // red
-                "#8B5CF6", // purple
-                "#6B7280", // gray
-              ][index % 6],
-            })) || [],
+          departmentData: [], // This would need to come from another table if needed
 
           gradeDistribution:
             grades?.map((grade) => ({
-              grade: grade.letter_grade,
-              count: grade.student_count,
-              percentage: Math.round(
-                (grade.student_count / grade.total_students) * 100
-              ),
+              grade: grade.grade_value, // assuming grade_value is the column name
+              count: grade.student_count || 1, // default to 1 if not available
+              percentage: grade.percentage || 0, // use actual percentage if available
             })) || [],
 
           paymentData:
             payments?.map((payment) => ({
-              month: payment.month_short,
-              collected: payment.amount_collected,
-              pending: payment.amount_pending,
+              month: new Date(payment.payment_date).toLocaleString("default", {
+                month: "short",
+              }),
+              collected: payment.amount,
+              pending: payment.status === "pending" ? payment.amount : 0,
             })) || [],
 
           yearLevelData:
-            yearLevels?.map((level) => ({
-              year: level.year_level,
-              male: level.male_count,
-              female: level.female_count,
-            })) || [],
+            Object.entries(yearLevelDistribution || {}).map(
+              ([year, count]) => ({
+                year,
+                male: 0, // You would need gender data to populate this
+                female: 0, // You would need gender data to populate this
+                total: count,
+              })
+            ) || [],
 
           stats: [
             {
               name: "Total Students",
-              value:
-                enrollment
-                  ?.reduce((sum, item) => sum + item.students, 0)
-                  .toLocaleString() || "0",
-              change: "+3.2%",
-              changeType: "increase",
+              value: students?.length.toString() || "0",
+              change: "+0%", // You would need historical data to calculate this
+              changeType: "neutral",
               icon: Users,
               color: "blue",
             },
             {
-              name: "Active Faculty",
-              value: "89",
-              change: "+2",
-              changeType: "increase",
+              name: "Average Grade",
+              value: grades?.length
+                ? (
+                    grades.reduce(
+                      (sum, grade) =>
+                        sum + (parseFloat(grade.grade_value) || 0),
+                      0
+                    ) / grades.length
+                  ).toFixed(2)
+                : "0.00",
+              change: "+0%",
+              changeType: "neutral",
               icon: GraduationCap,
               color: "green",
             },
             {
               name: "Revenue (Monthly)",
-              value: formatCurrency(payments?.[0]?.amount_collected || 0),
-              change: "-12.5%",
-              changeType: "decrease",
+              value: formatCurrency(
+                payments
+                  ?.filter((p) => p.status === "completed")
+                  .reduce((sum, payment) => sum + (payment.amount || 0), 0) || 0
+              ),
+              change: "-0%",
+              changeType: "neutral",
               icon: DollarSign,
               color: "yellow",
             },
             {
-              name: "Graduation Rate",
-              value: "94.2%",
-              change: "+1.8%",
-              changeType: "increase",
-              icon: Award,
-              color: "purple",
+              name: "Pending Payments",
+              value:
+                payments
+                  ?.filter((p) => p.status === "pending")
+                  .length.toString() || "0",
+              change: "+0%",
+              changeType: "neutral",
+              icon: AlertCircle,
+              color: "red",
             },
           ],
 
@@ -167,31 +176,36 @@ const AnalyticsAdmin: React.FC = () => {
             {
               type: "enrollment",
               message: `${
-                enrollment?.[0]?.students || 0
-              } new students enrolled this semester`,
+                enrollment?.[0]?.student_count || 0
+              } new enrollments this semester`,
               time: "Today",
               icon: Users,
             },
             {
               type: "payment",
               message: `${formatCurrency(
-                payments?.[0]?.amount_collected || 0
+                payments
+                  ?.filter(
+                    (p) =>
+                      p.status === "completed" &&
+                      new Date(p.payment_date).getMonth() ===
+                        new Date().getMonth()
+                  )
+                  .reduce((sum, p) => sum + (p.amount || 0), 0)
               )} collected this month`,
               time: "Today",
               icon: DollarSign,
             },
             {
               type: "grades",
-              message: "Grades being processed for current term",
+              message: `${grades?.length || 0} grades recorded`,
               time: "Today",
               icon: BookOpen,
             },
             {
               type: "alert",
               message: `${
-                payments?.[0]?.amount_pending
-                  ? Math.round(payments[0].amount_pending / 10000)
-                  : 0
+                payments?.filter((p) => p.status === "pending").length || 0
               } pending payments`,
               time: "Today",
               icon: AlertTriangle,
@@ -482,7 +496,7 @@ const AnalyticsAdmin: React.FC = () => {
       {/* Recent Activities and Quick Stats */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent Activities */}
-        <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        {/* <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
             Recent Activities
           </h3>
@@ -529,10 +543,10 @@ const AnalyticsAdmin: React.FC = () => {
               );
             })}
           </div>
-        </div>
+        </div> */}
 
         {/* Quick Stats */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        {/* <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
             Quick Stats
           </h3>
@@ -585,7 +599,7 @@ const AnalyticsAdmin: React.FC = () => {
               <AlertTriangle className="h-8 w-8 text-yellow-600 dark:text-yellow-400" />
             </div>
           </div>
-        </div>
+        </div> */}
       </div>
     </div>
   );

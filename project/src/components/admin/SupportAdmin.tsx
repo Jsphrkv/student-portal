@@ -41,48 +41,49 @@ const SupportAdmin: React.FC = () => {
   >("in_progress");
 
   useEffect(() => {
-    const fetchTickets = async () => {
-      setIsLoading(true);
-      try {
-        console.log("[DEBUG] Making query with params:", {
-          table: "support_requests",
-          filter: activeTab !== "all" ? { status: activeTab } : null,
-          order: { column: "created_at", ascending: true },
-        });
-
-        let query = supabase
-          .from("support_requests")
-          .select("*")
-          .order("created_at", { ascending: true }); // Changed to ASC
-
-        if (activeTab !== "all") {
-          query = query.eq("status", activeTab);
-        }
-
-        const { data, error, count } = await query;
-        // Format dates in console for verification
-        console.log(
-          "Sample dates:",
-          data?.map((item) => new Date(item.created_at).toISOString())
-        );
-
-        console.log("[DEBUG] Query results:", {
-          data,
-          error,
-          count,
-          isEmpty: data?.length === 0,
-        });
-
-        if (error) throw error;
-        setRequests(data || []);
-      } catch (error) {
-        console.error("[ERROR] Fetch failed:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
     fetchTickets();
   }, [activeTab]);
+
+  const fetchTickets = async () => {
+    setIsLoading(true);
+    try {
+      console.log("[DEBUG] Making query with params:", {
+        table: "support_requests",
+        filter: activeTab !== "all" ? { status: activeTab } : null,
+        order: { column: "created_at", ascending: true },
+      });
+
+      let query = supabase
+        .from("support_requests")
+        .select("*")
+        .order("created_at", { ascending: true }); // Changed to ASC
+
+      if (activeTab !== "all") {
+        query = query.eq("status", activeTab);
+      }
+
+      const { data, error, count } = await query;
+      // Format dates in console for verification
+      console.log(
+        "Sample dates:",
+        data?.map((item) => new Date(item.created_at).toISOString())
+      );
+
+      console.log("[DEBUG] Query results:", {
+        data,
+        error,
+        count,
+        isEmpty: data?.length === 0,
+      });
+
+      if (error) throw error;
+      setRequests(data || []);
+    } catch (error) {
+      console.error("[ERROR] Fetch failed:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleRespond = async (
     ticketId: number,

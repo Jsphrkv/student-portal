@@ -40,10 +40,10 @@ const GuestDashboard: React.FC = () => {
   ];
 
   const stats = [
-    { label: "Students Enrolled", value: "12,500+" },
-    { label: "Faculty Members", value: "850+" },
-    { label: "Academic Programs", value: "150+" },
-    { label: "Research Centers", value: "25+" },
+    { label: "Students Enrolled", value: "650+" },
+    { label: "Faculty Members", value: "20+" },
+    { label: "Academic Programs", value: "50+" },
+    { label: "Research Centers", value: "5+" },
   ];
 
   const getColorClasses = (color: string) => {

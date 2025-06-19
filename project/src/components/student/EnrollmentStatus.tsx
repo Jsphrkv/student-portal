@@ -40,6 +40,17 @@ interface EnrollmentHistory {
   created_at: string;
 }
 const EnrollmentStatus: React.FC = () => {
+  const generateDatePlusDays = (
+    base: string | Date,
+    daysToAdd: number = 10
+  ): Date => {
+    const baseDate = new Date(base);
+    baseDate.setDate(baseDate.getDate() + daysToAdd);
+    return baseDate;
+  };
+
+  const ddate = generateDatePlusDays(new Date(), 10);
+
   const { user } = useAuth();
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]); // Multiple enrollments
   const [currentEnrollment, setCurrentEnrollment] = useState<Enrollment | null>(
@@ -226,21 +237,32 @@ const EnrollmentStatus: React.FC = () => {
     );
   }
   const handleEnroll = async (subjectId: string) => {
-    if (!user?.id || !currentEnrollment) return;
+    if (!user?.id) return;
 
     const newId = uuidv4();
     setIsLoading(true);
 
     try {
-      const { data: newEnrollment, error } = await supabase
+      const { data: studentData, error: studentError } = await supabase
+        .from("student")
+        .select("*")
+        .eq("id", user.id)
+        .single();
+
+      if (studentError) {
+        console.warn("Student profile not found:", studentError);
+        return;
+      }
+
+      const { error } = await supabase
         .from("enrollments")
         .insert([
           {
             id: newId,
             student_id: user.id,
             subject_id: subjectId,
-            semester: currentEnrollment.semester,
-            courses_id: currentEnrollment.courses_id,
+            semester: studentData.semester,
+            courses_id: studentData.courses_id,
             status: "active",
             created_at: new Date().toISOString(),
           },
@@ -250,43 +272,82 @@ const EnrollmentStatus: React.FC = () => {
 
       if (error) throw error;
 
-      // Update state
-      setEnrollments((prev) => [newEnrollment, ...prev]);
+      // Fetch updated enrollments
+      const { data: updatedEnrollments, error: enrollmentError } =
+        await supabase
+          .from("enrollments")
+          .select("*")
+          .eq("student_id", user.id)
+          .eq("status", "active")
+          .order("created_at", { ascending: false });
 
-      // Refresh subjects
+      if (enrollmentError) throw enrollmentError;
+
+      // Update all relevant states
+      setEnrollments(updatedEnrollments || []);
+      setCurrentEnrollment(updatedEnrollments?.[0] || null);
+
+      // Fetch updated subjects
       const { data: updatedSubjects } = await supabase
         .from("subjects")
         .select("*");
       setSubjects(updatedSubjects || []);
 
-      const { data: history, error: historyError } = await supabase
-        .from("enrollments")
-        .select(
-          `
-            id,
-            semester,
-            status,
-            created_at,
-            subjects:subjects!enrollments_subject_id_fkey(count)
-          `
-        )
-        .eq("student_id", user.id)
-        .eq("status", "active")
-        .order("created_at", { ascending: false });
+      const { error: paymentError } = await supabase
+        .from("payments")
+        .insert([
+          {
+            id: newId,
+            student_id: user.id,
+            description: "Enrollment for " + updatedEnrollments[0].semester,
+            amount: updatedSubjects?.[0]?.amount * updatedSubjects?.[0]?.units,
+            due_date: ddate, // Assuming next10Days is defined
+            status: "pending",
+            semester: updatedEnrollments[0].semester,
+            billing_type: "enrollment",
+            created_at: new Date().toISOString(),
+            year_level: studentData.year,
+            section: studentData.section,
+          },
+        ])
+        .select()
+        .single();
 
-      if (historyError) throw historyError;
+      if (paymentError) throw paymentError;
 
-      // Transform history data to include subject count and units
-      const transformedHistory = (history || []).map((item) => ({
-        id: item.id,
-        semester: item.semester,
-        status: item.status,
-        subjects_count: item.subjects?.[0]?.count || 0,
-        units: 0, // Will be calculated below
-        created_at: item.created_at,
-      }));
+      // Calculate updated history with units
+      if (updatedEnrollments && updatedSubjects) {
+        const historyWithUnits = await Promise.all(
+          updatedEnrollments.map(async (enrollment) => {
+            const { data: enrollmentSubjects } = await supabase
+              .from("enrollments")
+              .select("subject_id")
+              .eq("id", enrollment.id);
 
-      setEnrollmentHistory(transformedHistory);
+            const subjectIds =
+              enrollmentSubjects?.map((es) => es.subject_id) || [];
+            const periodSubjects = updatedSubjects.filter((sub) =>
+              subjectIds.includes(sub.id)
+            );
+            const totalUnits = periodSubjects.reduce(
+              (sum, sub) => sum + sub.units,
+              0
+            );
+
+            return {
+              id: enrollment.id,
+              semester: enrollment.semester,
+              status: enrollment.status,
+              subjects_count: periodSubjects.length,
+              units: totalUnits,
+              created_at: enrollment.created_at,
+            };
+          })
+        );
+
+        setEnrollmentHistory(historyWithUnits);
+      }
+
       await LogAction({
         user_id: user?.id,
         action: "Enrolled in subject - " + subjectId,

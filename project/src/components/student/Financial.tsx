@@ -7,6 +7,9 @@ import {
   CheckCircle,
   Clock,
   AlertCircle,
+  X,
+  Banknote,
+  Wallet,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../../lib/supabase";
@@ -29,7 +32,11 @@ const Financial: React.FC = () => {
   const [paymentHistory, setPaymentHistory] = useState<Payment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // const [selectedPayment, setSelectedPayment] = useState<string | null>(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("credit_card");
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
   useEffect(() => {
     const fetchFinancialData = async () => {
@@ -39,7 +46,6 @@ const Financial: React.FC = () => {
       setError(null);
 
       try {
-        // Fetch all payments for the current student
         const { data: paymentsData, error: paymentsError } = await supabase
           .from("payments")
           .select("*")
@@ -48,7 +54,6 @@ const Financial: React.FC = () => {
 
         if (paymentsError) throw paymentsError;
 
-        // Separate into outstanding payments and payment history
         const outstanding = paymentsData.filter((p) => p.status !== "paid");
         const history = paymentsData.filter((p) => p.status === "paid");
 
@@ -107,36 +112,74 @@ const Financial: React.FC = () => {
         })
       : "No pending payments";
 
-  const handlePayment = async (paymentId: string) => {
+  const openPaymentModal = (payment: Payment) => {
+    setSelectedPayment(payment);
+    setPaymentAmount(payment.amount.toFixed(2));
+    setShowPaymentModal(true);
+  };
+
+  const closePaymentModal = () => {
+    setShowPaymentModal(false);
+    setSelectedPayment(null);
+    setPaymentAmount("");
+    setPaymentMethod("credit_card");
+  };
+
+  const handlePayment = async () => {
+    if (!selectedPayment || !paymentAmount) return;
+
+    setIsProcessingPayment(true);
+
     try {
-      // In a real implementation, this would integrate with Stripe/Payment processor
-      // For now, we'll simulate a successful payment
+      // Validate payment amount
+      const amount = parseFloat(paymentAmount);
+      if (isNaN(amount)) {
+        throw new Error("Please enter a valid payment amount");
+      }
+
+      if (amount <= 0) {
+        throw new Error("Payment amount must be greater than 0");
+      }
+
+      // Process payment (in a real app, this would connect to a payment gateway)
+      // For demo purposes, we'll just update the database
       const { error } = await supabase
         .from("payments")
         .update({
           status: "paid",
           paid_date: new Date().toISOString(),
+          payment_method: paymentMethod,
+          amount_paid: amount,
         })
-        .eq("id", paymentId);
+        .eq("id", selectedPayment.id);
 
       if (error) throw error;
 
       // Refresh the data
-      const payment = payments.find((p) => p.id === paymentId);
-      if (payment) {
-        setPayments(payments.filter((p) => p.id !== paymentId));
-        setPaymentHistory([
-          ...paymentHistory,
-          {
-            ...payment,
-            status: "paid",
-            paid_date: new Date().toISOString(),
-          },
-        ]);
-      }
+      const updatedPayments = payments.filter(
+        (p) => p.id !== selectedPayment.id
+      );
+      setPayments(updatedPayments);
+      setPaymentHistory([
+        ...paymentHistory,
+        {
+          ...selectedPayment,
+          status: "paid",
+          paid_date: new Date().toISOString(),
+        },
+      ]);
+
+      // Close modal and reset
+      closePaymentModal();
     } catch (error) {
       console.error("Error processing payment:", error);
-      alert("Payment failed. Please try again.");
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Payment failed. Please try again."
+      );
+    } finally {
+      setIsProcessingPayment(false);
     }
   };
 
@@ -160,6 +203,168 @@ const Financial: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
+      {/* Payment Modal */}
+      {showPaymentModal && selectedPayment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg w-full max-w-md">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Complete Payment
+                </h3>
+                <button
+                  onClick={closePaymentModal}
+                  className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Payment for
+                  </p>
+                  <p className="font-medium text-gray-900 dark:text-white">
+                    {selectedPayment.description}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Amount Due
+                    </p>
+                    <p className="font-medium text-gray-900 dark:text-white">
+                      ₱{selectedPayment.amount.toFixed(2)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Due Date
+                    </p>
+                    <p className="font-medium text-gray-900 dark:text-white">
+                      {new Date(selectedPayment.due_date).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="paymentAmount"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                  >
+                    Payment Amount
+                  </label>
+                  <div className="relative rounded-md shadow-sm">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <span className="text-gray-500 dark:text-gray-400 sm:text-sm">
+                        ₱
+                      </span>
+                    </div>
+                    <input
+                      type="number"
+                      name="paymentAmount"
+                      id="paymentAmount"
+                      className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-7 pr-12 py-2 sm:text-sm border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700"
+                      placeholder="0.00"
+                      value={paymentAmount}
+                      onChange={(e) => setPaymentAmount(e.target.value)}
+                      min="0"
+                      step="0.01"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="paymentMethod"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                  >
+                    Payment Method
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      className={`flex items-center justify-center p-3 rounded-md border ${
+                        paymentMethod === "credit_card"
+                          ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
+                          : "border-gray-300 dark:border-gray-600"
+                      }`}
+                      onClick={() => setPaymentMethod("credit_card")}
+                    >
+                      <CreditCard className="h-5 w-5 mr-2" />
+                      <span>Card</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`flex items-center justify-center p-3 rounded-md border ${
+                        paymentMethod === "bank_transfer"
+                          ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
+                          : "border-gray-300 dark:border-gray-600"
+                      }`}
+                      onClick={() => setPaymentMethod("bank_transfer")}
+                    >
+                      <Banknote className="h-5 w-5 mr-2" />
+                      <span>Bank</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`flex items-center justify-center p-3 rounded-md border ${
+                        paymentMethod === "ewallet"
+                          ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
+                          : "border-gray-300 dark:border-gray-600"
+                      }`}
+                      onClick={() => setPaymentMethod("ewallet")}
+                    >
+                      <Wallet className="h-5 w-5 mr-2" />
+                      <span>E-Wallet</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="pt-4">
+                  <button
+                    onClick={handlePayment}
+                    disabled={isProcessingPayment}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-md flex items-center justify-center disabled:opacity-50"
+                  >
+                    {isProcessingPayment ? (
+                      <>
+                        <svg
+                          className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          ></circle>
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          ></path>
+                        </svg>
+                        Processing...
+                      </>
+                    ) : (
+                      "Confirm Payment"
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rest of your existing component */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
           Financial Information
@@ -260,14 +465,14 @@ const Financial: React.FC = () => {
                     <div className="flex justify-between items-center">
                       <div>
                         <p className="text-lg font-bold text-gray-900 dark:text-white">
-                          ${payment.amount.toFixed(2)}
+                          ₱{payment.amount.toFixed(2)}
                         </p>
                         <p className="text-sm text-gray-600 dark:text-gray-400">
                           Due: {new Date(payment.due_date).toLocaleDateString()}
                         </p>
                       </div>
                       <button
-                        onClick={() => handlePayment(payment.id)}
+                        onClick={() => openPaymentModal(payment)}
                         className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-1"
                       >
                         <CreditCard className="h-4 w-4" />
@@ -315,12 +520,11 @@ const Financial: React.FC = () => {
                     </div>
                     <div className="text-right">
                       <p className="text-lg font-bold text-gray-900 dark:text-white">
-                        ${payment.amount.toFixed(2)}
+                        ₱{payment.amount.toFixed(2)}
                       </p>
                       <button
                         className="text-blue-600 dark:text-blue-400 hover:text-blue-500 text-sm flex items-center space-x-1"
                         onClick={() => {
-                          // In a real app, this would download a receipt
                           alert(
                             `Receipt for ${payment.description} would be downloaded`
                           );

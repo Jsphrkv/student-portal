@@ -9,11 +9,12 @@ import {
   CakeIcon,
   Calendar,
   Users,
+  NotebookPen,
   GraduationCap,
+  Scroll,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { StudentRegistrationData } from "../../types";
-import { supabase } from "../../../lib/supabase";
 
 interface RegisterFormProps {
   onToggleForm: (form: "login" | "register" | "forgot") => void;
@@ -36,6 +37,8 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleForm }) => {
     password: "",
     confirmPassword: "",
     course_id: "",
+    semester: "",
+    school_year: "",
   });
   const [showPassword, setShowPassword] = useState(false);
 
@@ -51,6 +54,30 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleForm }) => {
     { value: "B", label: "Section B" },
     { value: "C", label: "Section C" },
   ];
+
+  const semesters = [
+    { id: "1st Semester", name: "1st Semester" },
+    { id: "2nd Semester", name: "2nd Semester" },
+    { id: "3rd Semester", name: "3rd Semester" },
+  ];
+
+  const generateSchoolYears = (
+    count: number = 5
+  ): { id: string; name: string }[] => {
+    const startYear = new Date().getFullYear();
+    const years: { id: string; name: string }[] = [];
+
+    for (let i = 0; i < count; i++) {
+      const from = startYear + i;
+      const to = from + 1;
+      const label = `${from}-${to}`;
+      years.push({ id: label, name: label });
+    }
+
+    return years;
+  };
+
+  const schoolYear = generateSchoolYears(5);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,6 +104,8 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleForm }) => {
   };
 
   const handleInputChange = (field: string, value: string | number) => {
+    // Example usage
+
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -282,6 +311,60 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleForm }) => {
               {courses?.map((course) => (
                 <option key={course.id} value={course.id}>
                   {course.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label
+            htmlFor="course"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+          >
+            Semester *
+          </label>
+          <div className="relative">
+            <Scroll className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+
+            <select
+              id="semester"
+              value={formData.semester}
+              onChange={(e) => handleInputChange("semester", e.target.value)}
+              className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              required
+            >
+              <option value="">Select Semester</option>
+              {semesters?.map((semester) => (
+                <option key={semester.id} value={semester.id}>
+                  {semester.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label
+            htmlFor="course"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+          >
+            School Year *
+          </label>
+          <div className="relative">
+            <NotebookPen className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+
+            <select
+              id="schoolYear"
+              value={formData.school_year}
+              onChange={(e) => handleInputChange("school_year", e.target.value)}
+              className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              required
+            >
+              <option value="">Select School Year</option>
+              {schoolYear?.map((year) => (
+                <option key={year.id} value={year.id}>
+                  {year.name}
                 </option>
               ))}
             </select>

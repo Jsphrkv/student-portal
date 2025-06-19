@@ -115,6 +115,8 @@ export interface StudentRegistrationData {
   sex: string;
   section: string;
   contact: string;
+  semester: string;
+  school_year: string;
   course_id: string;
 }
 

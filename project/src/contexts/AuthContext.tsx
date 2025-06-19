@@ -163,6 +163,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               age: studentData.age,
               sex: studentData.sex.toLowerCase(),
               section: studentData.section,
+              semester: studentData.semester + " " + studentData.school_year,
               contact: parseInt(studentData.contact),
               student_id: newStudentID,
               courses_id: studentData.course_id,

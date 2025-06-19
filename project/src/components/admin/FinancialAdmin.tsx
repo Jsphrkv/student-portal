@@ -27,12 +27,31 @@ interface Payment {
   status: "paid" | "pending" | "overdue";
   semester: string;
   type: string;
-  year: "";
+  year_level: "";
   section: "";
   student_id?: string;
+  school_year?: string;
 }
 
+const generateSchoolYears = (
+  count: number = 6
+): { id: string; name: string }[] => {
+  const startYear = new Date().getFullYear() - 1;
+  const years: { id: string; name: string }[] = [];
+
+  for (let i = 0; i < count; i++) {
+    const from = startYear + i;
+    const to = from + 1;
+    const label = `${from}-${to}`;
+    years.push({ id: label, name: label });
+  }
+
+  return years;
+};
+
 const FinancialAdmin: React.FC = () => {
+  const schoolYear = generateSchoolYears(5);
+
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
 
@@ -48,6 +67,7 @@ const FinancialAdmin: React.FC = () => {
     type: "",
     year: "",
     section: "",
+    school_year: "",
   });
   const [showYearSelection, setShowYearSelection] = useState(false);
   const [showSectionSelection, setShowSectionSelection] = useState(false);
@@ -94,11 +114,10 @@ const FinancialAdmin: React.FC = () => {
     .filter((payment) => payment.status === "overdue")
     .reduce((sum, payment) => sum + payment.amount, 0);
 
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
-  ) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+  const handleInputChange = (field: string, value: string | number) => {
+    // Example usage
+
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -109,6 +128,7 @@ const FinancialAdmin: React.FC = () => {
       !formData.amount ||
       !formData.due_date ||
       !formData.semester ||
+      !formData.school_year ||
       !formData.type
     ) {
       alert("Please fill in all required fields.");
@@ -122,7 +142,7 @@ const FinancialAdmin: React.FC = () => {
             description: formData.description,
             amount: parseFloat(formData.amount),
             due_date: formData.due_date,
-            semester: formData.semester,
+            semester: formData.semester + " " + formData.school_year,
             section: formData.section ? formData.section : "All Sections",
             billing_type: formData.type,
           })
@@ -138,8 +158,6 @@ const FinancialAdmin: React.FC = () => {
       } else {
         // Fetch students by year level and section
         let query = supabase.from("student").select("id");
-
-        console.log(formData);
 
         if (
           formData.year !== "" ||
@@ -177,7 +195,7 @@ const FinancialAdmin: React.FC = () => {
             amount: parseFloat(formData.amount),
             due_date: formData.due_date,
             status: "pending" as const,
-            semester: formData.semester,
+            semester: formData.semester + " " + formData.school_year,
             billing_type: formData.type,
             year_level: formData.year ? formData.year : "",
             section: formData.section ? formData.section : "",
@@ -255,6 +273,7 @@ const FinancialAdmin: React.FC = () => {
       type: "",
       year: "",
       section: "",
+      school_year: "",
     });
     setShowYearSelection(false);
     setShowSectionSelection(false);
@@ -394,12 +413,12 @@ const FinancialAdmin: React.FC = () => {
         <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-medium text-gray-900 dark:text-white">
-              Payment Records
+              Billing Records
             </h2>
-            <button className="flex items-center px-3 py-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors">
+            {/* <button className="flex items-center px-3 py-2 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors">
               <Download className="h-4 w-4 mr-2" />
               Export
-            </button>
+            </button> */}
           </div>
         </div>
 
@@ -475,7 +494,7 @@ const FinancialAdmin: React.FC = () => {
                   {isAdmin && (
                     <>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                        {payment.year || "All"} / {payment.section || "All"}
+                        {payment.year_level} / {payment.section}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex items-center space-x-2">
@@ -496,8 +515,9 @@ const FinancialAdmin: React.FC = () => {
                                 due_date: payment.due_date,
                                 semester: payment.semester,
                                 type: payment.type,
-                                year: payment.year || "",
+                                year: payment.year_level || "",
                                 section: payment.section || "",
+                                school_year: payment.school_year || "",
                               });
                               setIsModalOpen(true);
                             }}
@@ -544,7 +564,9 @@ const FinancialAdmin: React.FC = () => {
                     name="description"
                     required
                     value={formData.description}
-                    onChange={handleInputChange}
+                    onChange={(e) =>
+                      handleInputChange("description", e.target.value)
+                    }
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
                     placeholder="Enter payment description"
                   />
@@ -565,7 +587,9 @@ const FinancialAdmin: React.FC = () => {
                     min="0"
                     step="0.01"
                     value={formData.amount}
-                    onChange={handleInputChange}
+                    onChange={(e) =>
+                      handleInputChange("amount", e.target.value)
+                    }
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
                     placeholder="0.00"
                   />
@@ -584,28 +608,62 @@ const FinancialAdmin: React.FC = () => {
                     name="due_date"
                     required
                     value={formData.due_date}
-                    onChange={handleInputChange}
+                    onChange={(e) =>
+                      handleInputChange("due_date", e.target.value)
+                    }
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
                   />
                 </div>
 
                 <div>
                   <label
-                    htmlFor="semester"
+                    htmlFor="type"
                     className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
                   >
                     Semester
                   </label>
-                  <input
-                    type="text"
+
+                  <select
                     id="semester"
                     name="semester"
                     required
                     value={formData.semester}
-                    onChange={handleInputChange}
+                    onChange={(e) =>
+                      handleInputChange("semester", e.target.value)
+                    }
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
-                    placeholder="e.g., 2nd Semester 2024-2025"
-                  />
+                  >
+                    <option value="">Select semester</option>
+                    <option value="1st Semester">1st Semester</option>
+                    <option value="2nd Semester">2nd Semester</option>
+                    <option value="3rd Semester">3rd Semester</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="type"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                  >
+                    School Year
+                  </label>
+
+                  <select
+                    id="school_year"
+                    name="school_year"
+                    required
+                    value={formData.school_year}
+                    onChange={(e) =>
+                      handleInputChange("school_year", e.target.value)
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                  >
+                    {schoolYear.map((year) => (
+                      <option key={year.id} value={year.id}>
+                        {year.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
@@ -620,7 +678,7 @@ const FinancialAdmin: React.FC = () => {
                     name="type"
                     required
                     value={formData.type}
-                    onChange={handleInputChange}
+                    onChange={(e) => handleInputChange("type", e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
                   >
                     <option value="">Select type</option>

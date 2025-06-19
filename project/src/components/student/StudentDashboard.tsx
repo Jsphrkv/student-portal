@@ -30,7 +30,7 @@ interface Grade {
 interface Payment {
   id: string;
   amount: number;
-  payment_date?: string;
+  paid_date?: string;
   due_date?: string;
   status: string;
 }
@@ -79,30 +79,6 @@ const StudentDashboard: React.FC = () => {
     weeklyPaymentAmount: 0,
   });
 
-  const [upcomingAssignments, setUpcomingAssignments] = useState<Assignment[]>([
-    {
-      id: 1,
-      course: "CS 101",
-      title: "Programming Assignment 3",
-      dueDate: "2024-12-20",
-      priority: "high",
-    },
-    {
-      id: 2,
-      course: "MATH 201",
-      title: "Calculus Problem Set",
-      dueDate: "2024-12-22",
-      priority: "medium",
-    },
-    {
-      id: 3,
-      course: "ENG 102",
-      title: "Essay Draft",
-      dueDate: "2024-12-25",
-      priority: "low",
-    },
-  ]);
-
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -140,7 +116,6 @@ const StudentDashboard: React.FC = () => {
 
         setPaymentsData(payments || []);
         setUserData(userData || []);
-        setUpcomingAssignments(assignments || []);
 
         // Calculate stats
         const monthlyTuition =
@@ -171,29 +146,16 @@ const StudentDashboard: React.FC = () => {
   };
 
   const outstandingBalance = paymentsData
-    .filter((payment) => !payment.payment_date)
+    .filter((payment) => !payment.paid_date)
     .reduce((sum, payment) => sum + (payment.amount || 0), 0);
 
   const nextPaymentDue = paymentsData
-    .filter((payment) => !payment.payment_date)
+    .filter((payment) => !payment.paid_date)
     .sort(
       (a, b) =>
         new Date(a.due_date || 0).getTime() -
         new Date(b.due_date || 0).getTime()
     )[0];
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case "high":
-        return "text-red-600 dark:text-red-400";
-      case "medium":
-        return "text-yellow-600 dark:text-yellow-400";
-      case "low":
-        return "text-green-600 dark:text-green-400";
-      default:
-        return "text-gray-600 dark:text-gray-400";
-    }
-  };
 
   const getLetterGrade = (numericGrade: number) => {
     if (numericGrade >= 97) return "A+";
@@ -253,7 +215,7 @@ const StudentDashboard: React.FC = () => {
         />
         <StatCard
           title="Outstanding Balance"
-          value={`$${outstandingBalance.toFixed(2)}`}
+          value={` ₱${outstandingBalance.toFixed(2)}`}
           icon={CreditCard}
           color={outstandingBalance > 0 ? "red" : "green"}
         />

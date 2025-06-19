@@ -1,3 +1,4 @@
+// Sidebar.tsx
 import React from "react";
 import { NavLink } from "react-router-dom";
 import {
@@ -51,9 +52,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isSidebarOpen, setSidebarOpen }) => {
 
   return (
     <aside
-      className={`fixed top-0 left-0 h-full w-64 bg-gray-50 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 transform transition-transform duration-300 ease-in-out z-40 ${
-        isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-      } md:translate-x-0 md:static md:block mt-16`}
+      className={`fixed md:static top-16 left-0 w-64 h-[calc(100vh-4rem)] overflow-y-auto
+        bg-gray-50 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700
+        z-40 transition-transform duration-300 ease-in-out
+        ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}
+        md:translate-x-0`}
     >
       <nav className="px-4 py-6">
         <ul className="space-y-2">

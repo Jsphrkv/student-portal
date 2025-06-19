@@ -6,6 +6,7 @@ import {
   TrendingUp,
   UserCheck,
   AlertTriangle,
+  BarChartBig,
   CreditCard,
   Calendar,
   FileText,
@@ -13,6 +14,15 @@ import {
 import { supabase } from "../../../lib/supabase"; // Make sure this is properly initialized
 import StatCard from "../shared/StatCard";
 import type { PostgrestSingleResponse } from "@supabase/supabase-js";
+import {
+  BarChart,
+  LabelList,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 
 interface ActivityType {
   id: string;
@@ -24,17 +34,27 @@ interface ActivityType {
 
 interface TaskType {
   id: string;
-  task: string;
-  count: number;
-  priority: "low" | "medium" | "high";
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+  status: string;
+}
+
+interface Student {
+  id: string;
+  courses_id: string;
+}
+
+interface Course {
+  id: string;
+  name: string;
 }
 
 const AdminDashboard: React.FC = () => {
   const [stats, setStats] = useState({
     studentCount: 0,
     courseCount: 0,
-    revenue: 0,
-    pendingIssues: 0,
     studentTrend: 0,
     courseTrend: 0,
     revenueTrend: 0,
@@ -44,13 +64,16 @@ const AdminDashboard: React.FC = () => {
     weeklyPaymentAmount: 0,
   });
 
-  const [recentActivities, setRecentActivities] = useState<ActivityType[]>([]);
   const [pendingTasks, setPendingTasks] = useState<TaskType[]>([]);
   const [loading, setLoading] = useState(true);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
 
   const firstDayOfMonth = new Date();
   firstDayOfMonth.setDate(1);
   firstDayOfMonth.setHours(0, 0, 0, 0);
+
+  const COLORS = ["#8884d8", "#82ca9d", "#ffc658", "#ff7f50", "#8dd1e1"];
 
   useEffect(() => {
     const fetchData = async () => {
@@ -61,12 +84,8 @@ const AdminDashboard: React.FC = () => {
           coursesData,
           weeklyPaymentsData,
           monthlyPaymentsData,
-          activitiesData,
           tasksData,
-          issuesData,
         ]: [
-          PostgrestSingleResponse<any>,
-          PostgrestSingleResponse<any>,
           PostgrestSingleResponse<any>,
           PostgrestSingleResponse<any>,
           PostgrestSingleResponse<any>,
@@ -74,10 +93,10 @@ const AdminDashboard: React.FC = () => {
           PostgrestSingleResponse<any>
         ] = await Promise.all([
           // Student stats
-          supabase.from("student").select("*", { count: "exact", head: true }),
+          supabase.from("student").select("*", { count: "exact" }),
 
           // Course stats
-          supabase.from("courses").select("*", { count: "exact", head: true }),
+          supabase.from("courses").select("*", { count: "exact" }),
 
           supabase
             .from("payments")
@@ -97,17 +116,17 @@ const AdminDashboard: React.FC = () => {
 
           // Recent activities (from audit_logs)
           supabase
-            .from("audit_logs")
+            .from("support_requests")
             .select("*")
             .order("created_at", { ascending: false })
             .limit(5),
-
-          // Add in your Promise.all list:
-          supabase.from("issue").select("*", { count: "exact", head: true }),
-
-          // Pending tasks (example: unprocessed payments)
-          supabase.from("payments").select("*").eq("status", "paid").limit(4),
         ]);
+
+        console.log(coursesData);
+
+        // Set students and courses for later use
+        setStudents(studentsData.data || []);
+        setCourses(coursesData.data || []);
 
         // Calculate trends (simplified example)
         const lastMonthStudentCount = 100; // You would fetch this from DB
@@ -132,24 +151,15 @@ const AdminDashboard: React.FC = () => {
             0
           ) || 0;
 
-        // Transform activities data to match your UI structure
-        const transformedActivities =
-          activitiesData.data?.map((log: any) => ({
-            id: log.id,
-            action: log.action_type || "System action",
-            user: log.user_id,
-            time: formatTimeAgo(log.created_at),
-            type: log.table_affected || "system",
-          })) || [];
-
         // Transform tasks data
         const transformedTasks =
           tasksData.data?.map((task: any, index: any) => ({
             id: task.id || index,
-            task: `Process payment ${task.id?.slice(0, 6) || ""}`,
-            count: 1, // Each task represents one item
-            priority:
-              index % 3 === 0 ? "high" : index % 2 === 0 ? "medium" : "low",
+            name: task.name || `Task ${index + 1}`,
+            email: task.email || "",
+            subject: task.subject || "",
+            message: task.message || "",
+            status: task.status || "pending",
           })) || [];
 
         // Update state
@@ -158,12 +168,6 @@ const AdminDashboard: React.FC = () => {
           courseCount: coursesData.count || 0,
           monthlyTuition, // Use this for "Tuition Collected"
           weeklyPaymentsCount, // Use this for "Recent Payments"
-          revenue:
-            monthlyPaymentsData.data?.reduce(
-              (sum: any, p: any) => sum + (p.amount || 0),
-              0
-            ) || 0,
-          pendingIssues: issuesData.count || 0,
           studentTrend,
           courseTrend: 5, // Example static value
           revenueTrend: 8.5, // Example static value
@@ -171,7 +175,6 @@ const AdminDashboard: React.FC = () => {
           weeklyPaymentAmount,
         });
 
-        setRecentActivities(transformedActivities);
         setPendingTasks(transformedTasks);
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
@@ -240,6 +243,12 @@ const AdminDashboard: React.FC = () => {
       </div>
     );
   }
+  console.log(courses);
+
+  const data = courses.map((course) => {
+    const count = students.filter((s) => s.courses_id === course.id).length;
+    return { name: course.name, value: count };
+  });
 
   return (
     <div className="space-y-6">
@@ -277,123 +286,105 @@ const AdminDashboard: React.FC = () => {
         />
         <StatCard
           title="Recent Payments (Week)"
-          value={`${stats.weeklyPaymentsCount} ($${stats.weeklyPaymentAmount})`}
+          value={`${stats.weeklyPaymentsCount} (₱${stats.weeklyPaymentAmount})`}
           icon={DollarSign}
           color="green"
           trend={{ value: 15, isPositive: true }}
         />
         <StatCard
           title="Tuition Collected (Month)"
-          value={`$${stats.monthlyTuition}`}
+          value={`₱${stats.monthlyTuition}`}
           icon={CreditCard}
           color="blue"
           trend={{ value: 6.5, isPositive: true }}
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Activities */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
-              <TrendingUp className="h-5 w-5 mr-2 text-blue-600 dark:text-blue-400" />
-              Recent Activities
-            </h2>
-          </div>
-          <div className="p-6">
-            <div className="space-y-4">
-              {recentActivities.map((activity) => (
-                <div
-                  key={activity.id}
-                  className="flex items-center space-x-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
-                >
-                  <div className="flex-shrink-0">
-                    {getActivityIcon(activity.type)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      {activity.action}
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {activity.user}
-                    </p>
-                  </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">
-                    {activity.time}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
+            <BarChartBig className="h-5 w-5 mr-2 text-blue-700 dark:text-blue-400" />
+            Student Distribution by Course
+          </h2>
         </div>
-
-        {/* Pending Tasks */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
-              <AlertTriangle className="h-5 w-5 mr-2 text-yellow-600 dark:text-yellow-400" />
-              Pending Issues
-            </h2>
-          </div>
-          <div className="p-6">
-            <div className="space-y-4">
-              {pendingTasks.map((task) => (
-                <div
-                  key={task.id}
-                  className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg"
-                >
-                  <div className="flex-1">
-                    <h3 className="font-medium text-gray-900 dark:text-white">
-                      {task.task}
-                    </h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {task.count} items pending
-                    </p>
-                  </div>
-                  <div
-                    className={`px-3 py-1 rounded-full text-xs font-medium ${getPriorityColor(
-                      task.priority
-                    )}`}
-                  >
-                    {task.priority.toUpperCase()}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+        <div className="p-6 h-96">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data} layout="vertical">
+              <XAxis
+                type="number"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fill: "#9CA3AF" }}
+              />
+              <YAxis
+                dataKey="name"
+                type="category"
+                width={150}
+                tick={{ fill: "#9CA3AF" }}
+              />
+              <Tooltip cursor={{ fill: "#f3f4f6" }} />
+              <Bar
+                dataKey="value"
+                fill="#3b82f6"
+                barSize={24}
+                radius={[4, 4, 4, 4]}
+              >
+                <LabelList dataKey="value" position="right" fill="#3b82f6" />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
-      {/* Quick Actions */}
+      {/* Pending Tasks */}
+
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-          Quick Actions
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <button className="p-4 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors group">
-            <Users className="h-6 w-6 text-blue-600 dark:text-blue-400 mb-2" />
-            <p className="text-sm font-medium text-blue-600 dark:text-blue-400">
-              Manage Students
-            </p>
-          </button>
-          <button className="p-4 bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/30 rounded-lg transition-colors group">
-            <GraduationCap className="h-6 w-6 text-green-600 dark:text-green-400 mb-2" />
-            <p className="text-sm font-medium text-green-600 dark:text-green-400">
-              Course Management
-            </p>
-          </button>
-          <button className="p-4 bg-yellow-50 dark:bg-yellow-900/20 hover:bg-yellow-100 dark:hover:bg-yellow-900/30 rounded-lg transition-colors group">
-            <DollarSign className="h-6 w-6 text-yellow-600 dark:text-yellow-400 mb-2" />
-            <p className="text-sm font-medium text-yellow-600 dark:text-yellow-400">
-              Financial Reports
-            </p>
-          </button>
-          <button className="p-4 bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/30 rounded-lg transition-colors group">
-            <FileText className="h-6 w-6 text-purple-600 dark:text-purple-400 mb-2" />
-            <p className="text-sm font-medium text-purple-600 dark:text-purple-400">
-              Announcements
-            </p>
-          </button>
+        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
+            <AlertTriangle className="h-5 w-5 mr-2 text-yellow-600 dark:text-yellow-400" />
+            Recent Issues
+          </h2>
+        </div>
+        <div className="p-6">
+          <div className="space-y-4">
+            {pendingTasks.length > 0 ? (
+              pendingTasks.map((task) => (
+                <div
+                  key={task.id}
+                  className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600"
+                >
+                  <div className="flex-1 space-y-1">
+                    <h3 className="font-medium text-gray-900 dark:text-white">
+                      {task.subject || "No Subject"}
+                    </h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      {task.message || "No Message"}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      From: {task.name} ({task.email})
+                    </p>
+                  </div>
+                  <div className="mt-2 md:mt-0">
+                    <span
+                      className={`px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide ${
+                        task.status === "pending"
+                          ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-200"
+                          : task.status === "resolved"
+                          ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-200"
+                          : "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
+                      }`}
+                    >
+                      {task.status || "Unknown"}
+                    </span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-center text-sm text-gray-500 dark:text-gray-400">
+                No pending issues found.
+              </p>
+            )}
+          </div>
         </div>
       </div>
     </div>

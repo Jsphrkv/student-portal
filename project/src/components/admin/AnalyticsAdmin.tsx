@@ -22,17 +22,18 @@ import {
   BookOpen,
   AlertTriangle,
   AlertCircle,
+  Clock,
 } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
 import LoadingSpinner from "../shared/LoadingSpinner";
 import { useAuth } from "../../contexts/AuthContext";
 
 interface AnalyticsData {
-  enrollmentData: { semester: string; students: number }[];
-  departmentData: { name: string; students: number; color: string }[];
-  gradeDistribution: { grade: string; count: number; percentage: number }[];
-  paymentData: { month: string; collected: number; pending: number }[];
-  yearLevelData: { year: string; male: number; female: number }[];
+  enrollmentTrends: { period: string; count: number }[];
+  departmentDistribution: { name: string; count: number; color: string }[];
+  gradeDistribution: { grade: string; count: number }[];
+  paymentAnalytics: { period: string; collected: number; pending: number }[];
+  genderDistribution: { year: string; male: number; female: number }[];
   stats: {
     name: string;
     value: string;
@@ -49,187 +50,257 @@ interface AnalyticsData {
   }[];
 }
 
+const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884D8"];
+
 const AnalyticsAdmin: React.FC = () => {
   const { user } = useAuth();
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [timeRange, setTimeRange] = useState<"week" | "month" | "year">(
+    "month"
+  );
 
   useEffect(() => {
     const fetchAnalyticsData = async () => {
-      setIsLoading(true);
-      try {
-        // Fetch all data in parallel
-        const [
-          { data: enrollment },
-          { data: grades },
-          { data: payments },
-          { data: students },
-        ] = await Promise.all([
-          supabase
-            .from("enrollments")
-            .select("*")
-            .order("semester", { ascending: true }),
-          supabase.from("grades").select("*"),
-          supabase
-            .from("payments")
-            .select("*")
-            .order("paid_date", { ascending: true }),
-          supabase.from("student").select("id, year"),
-        ]);
+      if (!user) return;
 
-        // Calculate year level distribution from students data
-        const yearLevelDistribution = students?.reduce((acc, student) => {
-          const yearLevel = student.year || "Unknown";
-          acc[yearLevel] = (acc[yearLevel] || 0) + 1;
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        // Get current date ranges
+        const now = new Date();
+        const startDate = new Date();
+
+        if (timeRange === "week") {
+          startDate.setDate(now.getDate() - 7);
+        } else if (timeRange === "month") {
+          startDate.setMonth(now.getMonth() - 1);
+        } else {
+          startDate.setFullYear(now.getFullYear() - 1);
+        }
+
+        // Fetch data from Supabase
+        const { data: enrollments } = await supabase
+          .from("enrollments")
+          .select("*")
+          .gte("created_at", startDate.toISOString())
+          .order("created_at", { ascending: true });
+
+        const { data: studentGroup } = await supabase
+          .from("students_per_section")
+          .select("*");
+
+        const { data: grades } = await supabase
+          .from("grades")
+          .select("id, grade, created_at")
+          .gte("created_at", startDate.toISOString());
+
+        const { data: payments } = await supabase
+          .from("payments")
+          .select("id, amount, status, paid_date")
+          .gte("due_date", startDate.toISOString())
+          .order("paid_date", { ascending: true });
+
+        const { data: students } = await supabase
+          .from("student")
+          .select("id, year, sex");
+
+        // Process enrollment trends
+        const enrollmentTrends = processTimeSeriesData(
+          enrollments || [],
+          timeRange,
+          "created_at"
+        );
+
+        // Process department distribution
+        const departmentDistribution = (studentGroup || []).map(
+          (dept, index) => ({
+            name: dept.name,
+            count: dept.count || 0,
+            color: COLORS[index % COLORS.length],
+          })
+        );
+
+        // Process grade distribution
+        const gradeDistribution = (grades || []).reduce((acc, grd) => {
+          const grade = grd.grade || 0;
+          const gradeRange = `${Math.floor(grade / 10) * 10}-${
+            Math.floor(grade / 10) * 10 + 9
+          }`;
+          acc[gradeRange] = (acc[gradeRange] || 0) + 1;
           return acc;
         }, {} as Record<string, number>);
 
-        // Transform data to match our format
+        // Process payment analytics
+        const paymentAnalytics = processTimeSeriesData(
+          payments || [],
+          timeRange,
+          "paid_date",
+          (payment) => ({
+            collected: payment.status === "paid" ? payment.amount || 0 : 0,
+            pending: payment.status === "pending" ? payment.amount || 0 : 0,
+          })
+        );
+
+        // Process gender distribution
+        const genderDistribution = (students || []).reduce((acc, student) => {
+          const year = student.year || "Unknown";
+          if (!acc[year]) {
+            acc[year] = { male: 0, female: 0 };
+          }
+          if (student.sex === "male") acc[year].male++;
+          if (student.sex === "female") acc[year].female++;
+          return acc;
+        }, {} as Record<string, { male: number; female: number }>);
+
+        // Calculate statistics
+        const totalStudents = students?.length || 0;
+        const totalPayments =
+          payments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
+        const pendingPayments =
+          payments?.filter((p) => p.status === "pending").length || 0;
+        const avgGrade = grades?.length
+          ? (
+              grades.reduce((sum, g) => sum + (g.grade || 0), 0) / grades.length
+            ).toFixed(1)
+          : "0.0";
+
+        // Prepare the final data structure
         const analyticsData: AnalyticsData = {
-          enrollmentData:
-            enrollment?.map((item) => ({
-              semester: item.semester,
-              students: item.student_count,
-            })) || [],
-
-          departmentData: [], // This would need to come from another table if needed
-
-          gradeDistribution:
-            grades?.map((grade) => ({
-              grade: grade.grade_value, // assuming grade_value is the column name
-              count: grade.student_count || 1, // default to 1 if not available
-              percentage: grade.percentage || 0, // use actual percentage if available
-            })) || [],
-
-          paymentData:
-            payments?.map((payment) => ({
-              month: new Date(payment.payment_date).toLocaleString("default", {
-                month: "short",
-              }),
-              collected: payment.amount,
-              pending: payment.status === "pending" ? payment.amount : 0,
-            })) || [],
-
-          yearLevelData:
-            Object.entries(yearLevelDistribution || {}).map(
-              ([year, count]) => ({
-                year,
-                male: 0, // You would need gender data to populate this
-                female: 0, // You would need gender data to populate this
-                total: count,
-              })
-            ) || [],
-
+          enrollmentTrends,
+          departmentDistribution,
+          gradeDistribution: Object.entries(gradeDistribution)
+            .map(([grade, count]) => ({ grade, count }))
+            .sort((a, b) => parseInt(a.grade) - parseInt(b.grade)),
+          paymentAnalytics,
+          genderDistribution: Object.entries(genderDistribution)
+            .map(([year, counts]) => ({ year, ...counts }))
+            .sort((a, b) => a.year.localeCompare(b.year)),
           stats: [
             {
               name: "Total Students",
-              value: students?.length.toString() || "0",
-              change: "+0%", // You would need historical data to calculate this
+              value: totalStudents.toString(),
+              change: "+0%", // You would calculate this based on historical data
               changeType: "neutral",
               icon: Users,
               color: "blue",
             },
             {
-              name: "Average Grade",
-              value: grades?.length
-                ? (
-                    grades.reduce(
-                      (sum, grade) =>
-                        sum + (parseFloat(grade.grade_value) || 0),
-                      0
-                    ) / grades.length
-                  ).toFixed(2)
-                : "0.00",
+              name: "Avg. Grade",
+              value: avgGrade,
               change: "+0%",
               changeType: "neutral",
               icon: GraduationCap,
               color: "green",
             },
             {
-              name: "Revenue (Monthly)",
-              value: formatCurrency(
-                payments
-                  ?.filter((p) => p.status === "completed")
-                  .reduce((sum, payment) => sum + (payment.amount || 0), 0) || 0
-              ),
-              change: "-0%",
+              name: "Total Revenue",
+              value: formatCurrency(totalPayments),
+              change: "+0%",
               changeType: "neutral",
               icon: DollarSign,
               color: "yellow",
             },
             {
               name: "Pending Payments",
-              value:
-                payments
-                  ?.filter((p) => p.status === "pending")
-                  .length.toString() || "0",
+              value: pendingPayments.toString(),
               change: "+0%",
               changeType: "neutral",
               icon: AlertCircle,
               color: "red",
             },
           ],
-
           recentActivities: [
             {
               type: "enrollment",
-              message: `${
-                enrollment?.[0]?.student_count || 0
-              } new enrollments this semester`,
-              time: "Today",
+              message: `${enrollmentTrends.reduce(
+                (sum, item) => sum + item.count,
+                0
+              )} total enrollments`,
+              time: "Current period",
               icon: Users,
             },
             {
               type: "payment",
               message: `${formatCurrency(
-                payments
-                  ?.filter(
-                    (p) =>
-                      p.status === "completed" &&
-                      new Date(p.payment_date).getMonth() ===
-                        new Date().getMonth()
-                  )
-                  .reduce((sum, p) => sum + (p.amount || 0), 0)
-              )} collected this month`,
-              time: "Today",
+                paymentAnalytics.reduce((sum, item) => sum + item.collected, 0)
+              )} collected`,
+              time: "Current period",
               icon: DollarSign,
             },
             {
               type: "grades",
               message: `${grades?.length || 0} grades recorded`,
-              time: "Today",
+              time: "Current period",
               icon: BookOpen,
             },
             {
               type: "alert",
-              message: `${
-                payments?.filter((p) => p.status === "pending").length || 0
-              } pending payments`,
-              time: "Today",
+              message: `${pendingPayments} pending payments`,
+              time: "Current period",
               icon: AlertTriangle,
             },
           ],
         };
 
         setData(analyticsData);
-      } catch (err: unknown) {
-        if (err instanceof Error) {
-          setError(err.message);
-        } else {
-          setError("Unexpected error");
-        }
+      } catch (err) {
         console.error("Error fetching analytics:", err);
+        setError("Failed to load analytics data. Please try again.");
       } finally {
         setIsLoading(false);
       }
     };
 
-    if (user) {
-      fetchAnalyticsData();
-    }
-  }, [user]);
+    fetchAnalyticsData();
+  }, [user, timeRange]);
 
+  // Helper function to process time series data
+  const processTimeSeriesData = (
+    data: any[],
+    range: "week" | "month" | "year",
+    dateField: string,
+    valueMapper?: (item: any) => Record<string, number>
+  ) => {
+    const result: Record<string, any> = {};
+
+    data.forEach((item) => {
+      const date = new Date(item[dateField]);
+      let key: string;
+
+      if (range === "year") {
+        key = new Intl.DateTimeFormat("en-US", { month: "short" }).format(date);
+      } else if (range === "month") {
+        key = new Intl.DateTimeFormat("en-US", {
+          month: "short",
+          day: "numeric",
+        }).format(date);
+      } else {
+        key = new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(
+          date
+        );
+      }
+
+      if (!result[key]) {
+        result[key] = valueMapper ? valueMapper(item) : { count: 0 };
+      } else {
+        if (valueMapper) {
+          Object.entries(valueMapper(item)).forEach(([k, v]) => {
+            result[key][k] = (result[key][k] || 0) + v;
+          });
+        } else {
+          result[key].count++;
+        }
+      }
+    });
+
+    return Object.entries(result).map(([period, values]) => ({
+      period,
+      ...values,
+    }));
+  };
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("en-PH", {
       style: "currency",
@@ -240,35 +311,76 @@ const AnalyticsAdmin: React.FC = () => {
   };
 
   if (isLoading) {
-    return <LoadingSpinner size="lg" text="Loading analytics..." />;
+    return (
+      <div className="flex items-center justify-center h-64">
+        <LoadingSpinner size="lg" text="Loading analytics..." />
+      </div>
+    );
   }
 
   if (error) {
     return (
       <div className="bg-red-100 dark:bg-red-900/20 text-red-800 dark:text-red-200 p-4 rounded-lg">
-        Error loading analytics: {error}
+        {error}
       </div>
     );
   }
 
   if (!data) {
-    return <div>No data available</div>;
+    return (
+      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+        No analytics data available
+      </div>
+    );
   }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header with time range selector */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-        <div className="flex items-center space-x-3">
-          <TrendingUp className="h-8 w-8 text-blue-600 dark:text-blue-400" />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              Analytics Dashboard
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400">
-              Comprehensive insights into student data and institutional
-              performance
-            </p>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center space-x-3">
+            <TrendingUp className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                Analytics Dashboard
+              </h1>
+              <p className="text-gray-600 dark:text-gray-400">
+                Comprehensive insights into institutional performance
+              </p>
+            </div>
+          </div>
+          <div className="flex space-x-2">
+            <button
+              onClick={() => setTimeRange("week")}
+              className={`px-3 py-1 text-sm rounded-md ${
+                timeRange === "week"
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+              }`}
+            >
+              Week
+            </button>
+            <button
+              onClick={() => setTimeRange("month")}
+              className={`px-3 py-1 text-sm rounded-md ${
+                timeRange === "month"
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+              }`}
+            >
+              Month
+            </button>
+            <button
+              onClick={() => setTimeRange("year")}
+              className={`px-3 py-1 text-sm rounded-md ${
+                timeRange === "year"
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300"
+              }`}
+            >
+              Year
+            </button>
           </div>
         </div>
       </div>
@@ -280,14 +392,30 @@ const AnalyticsAdmin: React.FC = () => {
           return (
             <div
               key={stat.name}
-              className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6"
+              className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 hover:shadow-md transition-shadow"
             >
               <div className="flex items-center">
                 <div
-                  className={`flex-shrink-0 p-3 rounded-lg bg-${stat.color}-100 dark:bg-${stat.color}-900/20`}
+                  className={`flex-shrink-0 p-3 rounded-lg ${
+                    stat.color === "blue"
+                      ? "bg-blue-100 dark:bg-blue-900/20"
+                      : stat.color === "green"
+                      ? "bg-green-100 dark:bg-green-900/20"
+                      : stat.color === "yellow"
+                      ? "bg-yellow-100 dark:bg-yellow-900/20"
+                      : "bg-red-100 dark:bg-red-900/20"
+                  }`}
                 >
                   <Icon
-                    className={`h-6 w-6 text-${stat.color}-600 dark:text-${stat.color}-400`}
+                    className={`h-6 w-6 ${
+                      stat.color === "blue"
+                        ? "text-blue-600 dark:text-blue-400"
+                        : stat.color === "green"
+                        ? "text-green-600 dark:text-green-400"
+                        : stat.color === "yellow"
+                        ? "text-yellow-600 dark:text-yellow-400"
+                        : "text-red-600 dark:text-red-400"
+                    }`}
                   />
                 </div>
                 <div className="ml-4">
@@ -302,7 +430,9 @@ const AnalyticsAdmin: React.FC = () => {
                       className={`ml-2 text-sm font-medium ${
                         stat.changeType === "increase"
                           ? "text-green-600 dark:text-green-400"
-                          : "text-red-600 dark:text-red-400"
+                          : stat.changeType === "decrease"
+                          ? "text-red-600 dark:text-red-400"
+                          : "text-gray-500 dark:text-gray-400"
                       }`}
                     >
                       {stat.change}
@@ -319,71 +449,93 @@ const AnalyticsAdmin: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Enrollment Trends */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-            Enrollment Trends
-          </h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={data.enrollmentData}>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="#E5E7EB"
-                strokeOpacity={0.2}
-              />
-              <XAxis
-                dataKey="semester"
-                stroke="#6B7280"
-                tick={{ fill: "#6B7280" }}
-              />
-              <YAxis stroke="#6B7280" tick={{ fill: "#6B7280" }} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "#1F2937",
-                  borderColor: "#374151",
-                  borderRadius: "0.5rem",
-                }}
-              />
-              <Legend />
-              <Line
-                type="monotone"
-                dataKey="students"
-                stroke="#3B82F6"
-                strokeWidth={3}
-                dot={{ fill: "#3B82F6", strokeWidth: 2, r: 6 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+              Enrollment Trends
+            </h3>
+            <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
+              <Clock className="h-4 w-4 mr-1" />
+              {timeRange === "week"
+                ? "Last 7 days"
+                : timeRange === "month"
+                ? "Last 30 days"
+                : "Last 12 months"}
+            </div>
+          </div>
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={data.enrollmentTrends}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="#E5E7EB"
+                  strokeOpacity={0.2}
+                />
+                <XAxis
+                  dataKey="period"
+                  stroke="#6B7280"
+                  tick={{ fill: "#6B7280" }}
+                />
+                <YAxis stroke="#6B7280" tick={{ fill: "#6B7280" }} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "#1F2937",
+                    borderColor: "#374151",
+                    borderRadius: "0.5rem",
+                  }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="count"
+                  stroke="#3B82F6"
+                  strokeWidth={2}
+                  dot={{ fill: "#3B82F6", strokeWidth: 2, r: 4 }}
+                  activeDot={{ r: 6 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
 
         {/* Department Distribution */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-            Students by Department
+            Students by Section
           </h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={data.departmentData}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={({ name, percentage }) => `${name}: ${percentage}%`}
-                outerRadius={80}
-                fill="#8884d8"
-                dataKey="students"
-              >
-                {data.departmentData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "#1F2937",
-                  borderColor: "#374151",
-                  borderRadius: "0.5rem",
-                }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={data.departmentDistribution}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }) =>
+                    `${name}: ${(percent * 100).toFixed(0)}%`
+                  }
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="count"
+                  nameKey="name"
+                >
+                  {data.departmentDistribution.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(value, name, props) => [
+                    value,
+                    props.payload.name,
+                  ]}
+                  contentStyle={{
+                    backgroundColor: "#1F2937",
+                    borderColor: "#374151",
+                    borderRadius: "0.5rem",
+                  }}
+                />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
         </div>
 
         {/* Grade Distribution */}
@@ -391,77 +543,92 @@ const AnalyticsAdmin: React.FC = () => {
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
             Grade Distribution
           </h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={data.gradeDistribution}>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="#E5E7EB"
-                strokeOpacity={0.2}
-              />
-              <XAxis
-                dataKey="grade"
-                stroke="#6B7280"
-                tick={{ fill: "#6B7280" }}
-              />
-              <YAxis stroke="#6B7280" tick={{ fill: "#6B7280" }} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "#1F2937",
-                  borderColor: "#374151",
-                  borderRadius: "0.5rem",
-                }}
-              />
-              <Legend />
-              <Bar dataKey="count" fill="#10B981" />
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data.gradeDistribution}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="#E5E7EB"
+                  strokeOpacity={0.2}
+                />
+                <XAxis
+                  dataKey="grade"
+                  stroke="#6B7280"
+                  tick={{ fill: "#6B7280" }}
+                />
+                <YAxis stroke="#6B7280" tick={{ fill: "#6B7280" }} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "#1F2937",
+                    borderColor: "#374151",
+                    borderRadius: "0.5rem",
+                  }}
+                />
+                <Bar dataKey="count" fill="#10B981" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
 
         {/* Payment Analytics */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-            Payment Collection
-          </h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={data.paymentData}>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="#E5E7EB"
-                strokeOpacity={0.2}
-              />
-              <XAxis
-                dataKey="month"
-                stroke="#6B7280"
-                tick={{ fill: "#6B7280" }}
-              />
-              <YAxis
-                stroke="#6B7280"
-                tick={{ fill: "#6B7280" }}
-                tickFormatter={(value) => `₱${(value / 1000000).toFixed(1)}M`}
-              />
-              <Tooltip
-                formatter={(value) => formatCurrency(value as number)}
-                contentStyle={{
-                  backgroundColor: "#1F2937",
-                  borderColor: "#374151",
-                  borderRadius: "0.5rem",
-                }}
-              />
-              <Legend />
-              <Bar
-                dataKey="collected"
-                stackId="a"
-                fill="#10B981"
-                name="Collected"
-              />
-              <Bar
-                dataKey="pending"
-                stackId="a"
-                fill="#F59E0B"
-                name="Pending"
-              />
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+              Payment Collection
+            </h3>
+            <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
+              <Clock className="h-4 w-4 mr-1" />
+              {timeRange === "week"
+                ? "Last 7 days"
+                : timeRange === "month"
+                ? "Last 30 days"
+                : "Last 12 months"}
+            </div>
+          </div>
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data.paymentAnalytics}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="#E5E7EB"
+                  strokeOpacity={0.2}
+                />
+                <XAxis
+                  dataKey="period"
+                  stroke="#6B7280"
+                  tick={{ fill: "#6B7280" }}
+                />
+                <YAxis
+                  stroke="#6B7280"
+                  tick={{ fill: "#6B7280" }}
+                  tickFormatter={(value) => `₱${value / 1000}k`}
+                />
+                <Tooltip
+                  formatter={(value) => formatCurrency(Number(value))}
+                  contentStyle={{
+                    backgroundColor: "#1F2937",
+                    borderColor: "#374151",
+                    borderRadius: "0.5rem",
+                  }}
+                />
+                <Legend />
+                <Bar
+                  dataKey="collected"
+                  name="Collected"
+                  stackId="a"
+                  fill="#10B981"
+                  radius={[4, 4, 0, 0]}
+                />
+                <Bar
+                  dataKey="pending"
+                  name="Pending"
+                  stackId="a"
+                  fill="#F59E0B"
+                  radius={[4, 4, 0, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </div>
 
@@ -470,139 +637,46 @@ const AnalyticsAdmin: React.FC = () => {
         <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
           Gender Distribution by Year Level
         </h3>
-        <ResponsiveContainer width="100%" height={400}>
-          <BarChart
-            data={data.yearLevelData}
-            margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
-          >
-            <CartesianGrid
-              strokeDasharray="3 3"
-              stroke="#E5E7EB"
-              strokeOpacity={0.2}
-            />
-            <XAxis dataKey="year" stroke="#6B7280" tick={{ fill: "#6B7280" }} />
-            <YAxis stroke="#6B7280" tick={{ fill: "#6B7280" }} />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "#1F2937",
-                borderColor: "#374151",
-                borderRadius: "0.5rem",
-              }}
-            />
-            <Legend />
-            <Bar dataKey="male" fill="#3B82F6" name="Male" />
-            <Bar dataKey="female" fill="#EC4899" name="Female" />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Recent Activities and Quick Stats */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent Activities */}
-        {/* <div className="lg:col-span-2 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-            Recent Activities
-          </h3>
-          <div className="space-y-4">
-            {data.recentActivities.map((activity, index) => {
-              const Icon = activity.icon;
-              return (
-                <div
-                  key={index}
-                  className="flex items-start space-x-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                >
-                  <div
-                    className={`flex-shrink-0 p-2 rounded-lg ${
-                      activity.type === "enrollment"
-                        ? "bg-blue-100 dark:bg-blue-900/20"
-                        : activity.type === "payment"
-                        ? "bg-green-100 dark:bg-green-900/20"
-                        : activity.type === "grades"
-                        ? "bg-purple-100 dark:bg-purple-900/20"
-                        : "bg-red-100 dark:bg-red-900/20"
-                    }`}
-                  >
-                    <Icon
-                      className={`h-5 w-5 ${
-                        activity.type === "enrollment"
-                          ? "text-blue-600 dark:text-blue-400"
-                          : activity.type === "payment"
-                          ? "text-green-600 dark:text-green-400"
-                          : activity.type === "grades"
-                          ? "text-purple-600 dark:text-purple-400"
-                          : "text-red-600 dark:text-red-400"
-                      }`}
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      {activity.message}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {activity.time}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div> */}
-
-        {/* Quick Stats */}
-        {/* <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-            Quick Stats
-          </h3>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-              <div>
-                <p className="text-sm font-medium text-blue-900 dark:text-blue-200">
-                  Average GPA
-                </p>
-                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                  3.42
-                </p>
-              </div>
-              <TrendingUp className="h-8 w-8 text-blue-600 dark:text-blue-400" />
-            </div>
-
-            <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
-              <div>
-                <p className="text-sm font-medium text-green-900 dark:text-green-200">
-                  Retention Rate
-                </p>
-                <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                  96.8%
-                </p>
-              </div>
-              <Users className="h-8 w-8 text-green-600 dark:text-green-400" />
-            </div>
-
-            <div className="flex items-center justify-between p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-              <div>
-                <p className="text-sm font-medium text-purple-900 dark:text-purple-200">
-                  Active Courses
-                </p>
-                <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                  156
-                </p>
-              </div>
-              <BookOpen className="h-8 w-8 text-purple-600 dark:text-purple-400" />
-            </div>
-
-            <div className="flex items-center justify-between p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
-              <div>
-                <p className="text-sm font-medium text-yellow-900 dark:text-yellow-200">
-                  Pending Issues
-                </p>
-                <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
-                  12
-                </p>
-              </div>
-              <AlertTriangle className="h-8 w-8 text-yellow-600 dark:text-yellow-400" />
-            </div>
-          </div>
-        </div> */}
+        <div className="h-96">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={data.genderDistribution}
+              margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+            >
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="#E5E7EB"
+                strokeOpacity={0.2}
+              />
+              <XAxis
+                dataKey="year"
+                stroke="#6B7280"
+                tick={{ fill: "#6B7280" }}
+              />
+              <YAxis stroke="#6B7280" tick={{ fill: "#6B7280" }} />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "#1F2937",
+                  borderColor: "#374151",
+                  borderRadius: "0.5rem",
+                }}
+              />
+              <Legend />
+              <Bar
+                dataKey="male"
+                fill="#3B82F6"
+                name="Male"
+                radius={[4, 4, 0, 0]}
+              />
+              <Bar
+                dataKey="female"
+                fill="#EC4899"
+                name="Female"
+                radius={[4, 4, 0, 0]}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </div>
     </div>
   );

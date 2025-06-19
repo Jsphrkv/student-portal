@@ -267,7 +267,7 @@ const SupportAdmin: React.FC = () => {
             <thead className="bg-gray-50 dark:bg-gray-700">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                  Ticket
+                  Requestor
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                   Subject
@@ -291,7 +291,7 @@ const SupportAdmin: React.FC = () => {
                 >
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900 dark:text-white">
-                      {ticket.name}
+                      {ticket.name}-#{ticket.id}
                     </div>
                     <div className="text-sm text-gray-500 dark:text-gray-400">
                       {ticket.email}

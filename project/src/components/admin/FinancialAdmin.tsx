@@ -27,8 +27,8 @@ interface Payment {
   status: "paid" | "pending" | "overdue";
   semester: string;
   type: string;
-  year?: "All Years";
-  section?: "All Sections";
+  year: "";
+  section: "";
   student_id?: string;
 }
 
@@ -52,8 +52,8 @@ const FinancialAdmin: React.FC = () => {
   const [showYearSelection, setShowYearSelection] = useState(false);
   const [showSectionSelection, setShowSectionSelection] = useState(false);
 
-  const years = ["All Years", "1st Year", "2nd Year", "3rd Year"];
-  const sections = ["All Sections", "A-AM", "A-PM", "B", "C"];
+  const years = ["1st Year", "2nd Year", "3rd Year"];
+  const sections = ["A-AM", "A-PM", "B", "C"];
 
   useEffect(() => {
     fetchPayments();
@@ -139,19 +139,33 @@ const FinancialAdmin: React.FC = () => {
         // Fetch students by year level and section
         let query = supabase.from("student").select("id");
 
-        if (formData.year) {
+        console.log(formData);
+
+        if (
+          formData.year !== "" ||
+          formData.year !== null ||
+          formData.year !== undefined ||
+          formData.year != "All Years"
+        ) {
           query = query.eq("year", formData.year);
         }
 
-        if (formData.section) {
+        if (
+          formData.section !== "" ||
+          formData.section !== null ||
+          formData.section !== undefined ||
+          formData.section != "All Sections"
+        ) {
           query = query.eq("section", formData.section);
         }
 
         const { data: students, error: studentError } = await query;
 
         if (studentError) throw studentError;
-        if (!students || students.length === 0)
-          throw new Error("No students found for the selected level/section");
+        if (!students || students.length === 0) {
+          window.alert("No students found for the selected level/section");
+          return;
+        }
 
         const paymentsToInsert = students.map((student) => {
           const newId = uuidv4();
@@ -165,8 +179,8 @@ const FinancialAdmin: React.FC = () => {
             status: "pending" as const,
             semester: formData.semester,
             billing_type: formData.type,
-            year_level: formData.year ? formData.year : "All Years",
-            section: formData.section ? formData.section : "All Sections",
+            year_level: formData.year ? formData.year : "",
+            section: formData.section ? formData.section : "",
           };
           return retStudent;
         });
@@ -634,7 +648,7 @@ const FinancialAdmin: React.FC = () => {
                             }}
                             className="flex items-center px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                           >
-                            <span>Year: {formData.year || "All"}</span>
+                            <span>Year {formData.year}</span>
                             {showYearSelection ? (
                               <ChevronUp className="h-4 w-4 ml-2" />
                             ) : (
@@ -650,7 +664,7 @@ const FinancialAdmin: React.FC = () => {
                             }}
                             className="flex items-center px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                           >
-                            <span>Section: {formData.section || "All"}</span>
+                            <span>Section: {formData.section}</span>
                             {showSectionSelection ? (
                               <ChevronUp className="h-4 w-4 ml-2" />
                             ) : (
@@ -685,28 +699,16 @@ const FinancialAdmin: React.FC = () => {
                         )}
 
                         {showSectionSelection && (
-                          <div className="grid grid-cols-2 gap-2 p-2 bg-gray-50 dark:bg-gray-700 rounded-md">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setFormData((prev) => ({
-                                  ...prev,
-                                  section: "",
-                                }));
-                                setShowSectionSelection(false);
-                              }}
-                              className={`px-3 py-1 text-sm rounded ${
-                                !formData.section
-                                  ? "bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200"
-                                  : "bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500"
-                              }`}
-                            ></button>
+                          <div className="grid grid-cols-3 gap-2 p-2 bg-gray-50 dark:bg-gray-700 rounded-md">
                             {sections.map((section) => (
                               <button
                                 key={section}
                                 type="button"
                                 onClick={() => {
-                                  setFormData((prev) => ({ ...prev, section }));
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    section: section,
+                                  }));
                                   setShowSectionSelection(false);
                                 }}
                                 className={`px-3 py-1 text-sm rounded ${

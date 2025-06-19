@@ -31,7 +31,7 @@ const Header: React.FC<HeaderProps> = ({ isSidebarOpen, setSidebarOpen }) => {
             </button>
 
             <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-              University Portal
+              ICAS Sucat Campus
             </h1>
           </div>
 

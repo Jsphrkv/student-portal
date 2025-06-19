@@ -16,6 +16,7 @@ import {
 import { supabase } from "../../../lib/supabase";
 import LoadingSpinner from "../shared/LoadingSpinner";
 import { v4 as uuidv4 } from "uuid";
+import { LogAction } from "../../../utils/logger";
 
 interface Payment {
   id: number;
@@ -26,8 +27,8 @@ interface Payment {
   status: "paid" | "pending" | "overdue";
   semester: string;
   type: string;
-  year?: string;
-  section?: string;
+  year?: "All Years";
+  section?: "All Sections";
   student_id?: string;
 }
 
@@ -52,7 +53,7 @@ const FinancialAdmin: React.FC = () => {
   const [showSectionSelection, setShowSectionSelection] = useState(false);
 
   const years = ["All Years", "1st Year", "2nd Year", "3rd Year"];
-  const sections = ["A-AM", "A-PM", "B", "C"];
+  const sections = ["All Sections", "A-AM", "A-PM", "B", "C"];
 
   useEffect(() => {
     fetchPayments();
@@ -103,13 +104,16 @@ const FinancialAdmin: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    console.log(
-      "Billing filter → year:",
-      formData.year,
-      "| section:",
-      formData.section
-    );
-
+    if (
+      !formData.description ||
+      !formData.amount ||
+      !formData.due_date ||
+      !formData.semester ||
+      !formData.type
+    ) {
+      alert("Please fill in all required fields.");
+      return;
+    }
     try {
       if (editingPayment) {
         const { error } = await supabase
@@ -119,36 +123,53 @@ const FinancialAdmin: React.FC = () => {
             amount: parseFloat(formData.amount),
             due_date: formData.due_date,
             semester: formData.semester,
-            type: formData.type,
+            section: formData.section ? formData.section : "All Sections",
+            billing_type: formData.type,
           })
           .eq("id", editingPayment.id);
 
         if (error) throw error;
+
+        await LogAction({
+          user_id: user?.id,
+          action: "Updated payment",
+          module: "Financial Admin",
+        });
       } else {
         // Fetch students by year level and section
-        const { data: students, error: studentError } = await supabase
-          .from("student") // ✅ correct table name
-          .select("id") // ✅ student.id
-          .eq("year", formData.year)
-          .eq("section", formData.section);
+        let query = supabase.from("student").select("id");
+
+        if (formData.year) {
+          query = query.eq("year", formData.year);
+        }
+
+        if (formData.section) {
+          query = query.eq("section", formData.section);
+        }
+
+        const { data: students, error: studentError } = await query;
 
         if (studentError) throw studentError;
         if (!students || students.length === 0)
           throw new Error("No students found for the selected level/section");
 
-        const newId = uuidv4();
-        const paymentsToInsert = students.map((student) => ({
-          id: newId,
-          student_id: student.id,
-          description: formData.description,
-          amount: parseFloat(formData.amount),
-          due_date: formData.due_date,
-          status: "pending" as const,
-          semester: formData.semester,
-          billing_type: formData.type,
-          year_level: formData.year,
-          section: formData.section,
-        }));
+        const paymentsToInsert = students.map((student) => {
+          const newId = uuidv4();
+
+          const retStudent = {
+            id: newId,
+            student_id: student.id,
+            description: formData.description,
+            amount: parseFloat(formData.amount),
+            due_date: formData.due_date,
+            status: "pending" as const,
+            semester: formData.semester,
+            billing_type: formData.type,
+            year_level: formData.year ? formData.year : "All Years",
+            section: formData.section ? formData.section : "All Sections",
+          };
+          return retStudent;
+        });
 
         const { error: insertError } = await supabase
           .from("payments")
@@ -158,8 +179,17 @@ const FinancialAdmin: React.FC = () => {
 
       await fetchPayments();
       handleCloseModal();
-    } catch (error: any) {
-      console.error("Error saving payment:", error.message);
+
+      await LogAction({
+        user_id: user?.id,
+        action: editingPayment ? "Updated payment" : "Added new billing",
+        module: "Financial Admin",
+      });
+    } catch (error: unknown) {
+      console.error(
+        "Error saving payment:",
+        (error as { message?: string }).message
+      );
     }
   };
 
@@ -188,6 +218,12 @@ const FinancialAdmin: React.FC = () => {
         const { error } = await supabase.from("payments").delete().eq("id", id);
         if (error) throw error;
         await fetchPayments();
+
+        await LogAction({
+          user_id: user?.id,
+          action: "Deleted payment",
+          module: "Financial Admin",
+        });
       } catch (error) {
         console.error("Error deleting payment:", error);
       }
@@ -664,9 +700,7 @@ const FinancialAdmin: React.FC = () => {
                                   ? "bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200"
                                   : "bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500"
                               }`}
-                            >
-                              All Sections
-                            </button>
+                            ></button>
                             {sections.map((section) => (
                               <button
                                 key={section}
@@ -701,6 +735,7 @@ const FinancialAdmin: React.FC = () => {
                   </button>
                   <button
                     type="submit"
+                    onClick={handleSubmit}
                     className="px-4 py-2 text-sm font-medium text-white bg-blue-600 dark:bg-blue-700 rounded-md hover:bg-blue-700 dark:hover:bg-blue-800 transition-colors"
                   >
                     {editingPayment ? "Update" : "Submit Billing"}

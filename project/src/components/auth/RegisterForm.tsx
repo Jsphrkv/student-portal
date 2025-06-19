@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Eye,
   EyeOff,
@@ -9,16 +9,18 @@ import {
   CakeIcon,
   Calendar,
   Users,
+  GraduationCap,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { StudentRegistrationData } from "../../types";
+import { supabase } from "../../../lib/supabase";
 
 interface RegisterFormProps {
   onToggleForm: (form: "login" | "register" | "forgot") => void;
 }
 
 const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleForm }) => {
-  const { register, isLoading, error } = useAuth();
+  const { register, isLoading, error, courses } = useAuth();
   const [formData, setFormData] = useState<
     StudentRegistrationData & { confirmPassword: string }
   >({
@@ -33,6 +35,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleForm }) => {
     contact: "",
     password: "",
     confirmPassword: "",
+    course_id: "",
   });
   const [showPassword, setShowPassword] = useState(false);
 
@@ -255,6 +258,33 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleForm }) => {
                 ))}
               </select>
             </div>
+          </div>
+        </div>
+
+        <div>
+          <label
+            htmlFor="course"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+          >
+            Course *
+          </label>
+          <div className="relative">
+            <GraduationCap className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+
+            <select
+              id="course"
+              value={formData.course_id}
+              onChange={(e) => handleInputChange("course_id", e.target.value)}
+              className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              required
+            >
+              <option value="">Select Course</option>
+              {courses?.map((course) => (
+                <option key={course.id} value={course.id}>
+                  {course.name}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 

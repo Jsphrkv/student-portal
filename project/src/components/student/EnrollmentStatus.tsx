@@ -10,39 +10,44 @@ import {
 import { useAuth } from "../../contexts/AuthContext";
 import LoadingSpinner from "../shared/LoadingSpinner";
 import { supabase } from "../../../lib/supabase";
+import { v4 as uuidv4 } from "uuid";
+import { LogAction } from "../../../utils/logger";
 
 interface Subject {
   id: string;
   name: string;
   code: string;
-  credits: number;
+  units: number;
   instructor: string;
   schedule: string;
   room: string;
 }
-
 interface Enrollment {
   id: string;
   student_id: string;
   semester: string;
   status: "active" | "inactive" | "pending";
   created_at: string;
-  subjects?: string[]; // Array of subject IDs
+  subject_id: string; // Single subject ID per enrollment record
+  courses_id?: string; // Optional course reference
 }
-
 interface EnrollmentHistory {
   id: string;
   semester: string;
-  status: string;
+  status: "active" | "inactive" | "pending";
   subjects_count: number;
-  credits: number;
+  units: number;
   created_at: string;
 }
-
 const EnrollmentStatus: React.FC = () => {
   const { user } = useAuth();
-  const [enrollmentData, setEnrollmentData] = useState<Enrollment | null>(null);
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([]); // Multiple enrollments
+  const [currentEnrollment, setCurrentEnrollment] = useState<Enrollment | null>(
+    null
+  ); // Current active enrollment
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [showAllEnrolled, setShowAllEnrolled] = useState(false);
+  const [showAllAvailable, setShowAllAvailable] = useState(false);
   const [enrollmentHistory, setEnrollmentHistory] = useState<
     EnrollmentHistory[]
   >([]);
@@ -58,17 +63,22 @@ const EnrollmentStatus: React.FC = () => {
 
       try {
         // Fetch current enrollment
-        const { data: enrollment, error: enrollmentError } = await supabase
+        // In your fetchData function
+        // Fetch all enrollments
+        const { data: enrollments, error: enrollmentError } = await supabase
           .from("enrollments")
           .select("*")
           .eq("student_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
+          .eq("status", "active")
+          .order("created_at", { ascending: false });
 
         if (enrollmentError) throw enrollmentError;
 
-        setEnrollmentData(enrollment);
+        // Set current enrollment (most recent active one)
+        const activeEnrollment =
+          enrollments?.find((e) => e.status === "active") || null;
+        setCurrentEnrollment(activeEnrollment);
+        setEnrollments(enrollments || []);
 
         // Fetch all subjects
         const { data: allSubjects, error: subjectsError } = await supabase
@@ -88,52 +98,53 @@ const EnrollmentStatus: React.FC = () => {
             semester,
             status,
             created_at,
-            subjects:enrollment_subjects(count)
+            subjects:subjects!enrollments_subject_id_fkey(count)
           `
           )
           .eq("student_id", user.id)
+          .eq("status", "active")
           .order("created_at", { ascending: false });
 
         if (historyError) throw historyError;
 
-        // Transform history data to include subject count and credits
+        // Transform history data to include subject count and units
         const transformedHistory = (history || []).map((item) => ({
           id: item.id,
           semester: item.semester,
           status: item.status,
           subjects_count: item.subjects?.[0]?.count || 0,
-          credits: 0, // Will be calculated below
+          units: 0, // Will be calculated below
           created_at: item.created_at,
         }));
 
-        // Calculate credits for each enrollment period
-        if (enrollment && allSubjects) {
-          const historyWithCredits = await Promise.all(
+        // Calculate units for each enrollment period
+        if (enrollments && allSubjects) {
+          const historyWithUnits = await Promise.all(
             transformedHistory.map(async (historyItem) => {
               // Fetch subjects for this enrollment period
               const { data: enrollmentSubjects } = await supabase
-                .from("enrollment_subjects")
+                .from("enrollments")
                 .select("subject_id")
-                .eq("enrollment_id", historyItem.id);
+                .eq("id", historyItem.id);
 
               const subjectIds =
                 enrollmentSubjects?.map((es) => es.subject_id) || [];
               const periodSubjects = allSubjects.filter((sub) =>
                 subjectIds.includes(sub.id)
               );
-              const totalCredits = periodSubjects.reduce(
-                (sum, sub) => sum + sub.credits,
+              const totalUnits = periodSubjects.reduce(
+                (sum, sub) => sum + sub.units,
                 0
               );
 
               return {
                 ...historyItem,
-                credits: totalCredits,
+                units: totalUnits,
               };
             })
           );
 
-          setEnrollmentHistory(historyWithCredits);
+          setEnrollmentHistory(historyWithUnits);
         } else {
           setEnrollmentHistory(transformedHistory);
         }
@@ -175,21 +186,25 @@ const EnrollmentStatus: React.FC = () => {
   };
 
   // Get enrolled subjects for current enrollment
-  const enrolledSubjects = enrollmentData?.subjects
-    ? subjects.filter((subject) =>
-        enrollmentData.subjects?.includes(subject.id)
-      )
+  // Get all subject IDs from current enrollment
+  const enrolledSubjectIds = currentEnrollment
+    ? enrollments
+        .filter((e) => e.semester === currentEnrollment.semester)
+        .map((e) => e.subject_id)
     : [];
 
+  // Get full subject objects
+  const enrolledSubjects = subjects.filter((subject) =>
+    enrolledSubjectIds.includes(subject.id)
+  );
   // Get available subjects (not enrolled in current enrollment)
-  const availableSubjects = enrollmentData?.subjects
-    ? subjects.filter(
-        (subject) => !enrollmentData.subjects?.includes(subject.id)
-      )
-    : subjects;
+  const enrolledIds = enrollments.map((e) => e.subject_id);
+  const availableSubjects = subjects.filter(
+    (subject) => !enrolledIds.includes(subject.id)
+  );
 
-  const totalCredits = enrolledSubjects.reduce(
-    (sum, subject) => sum + subject.credits,
+  const totalUnits = enrolledSubjects.reduce(
+    (sum, subject) => sum + subject.units,
     0
   );
 
@@ -210,6 +225,155 @@ const EnrollmentStatus: React.FC = () => {
       </div>
     );
   }
+  const handleEnroll = async (subjectId: string) => {
+    if (!user?.id || !currentEnrollment) return;
+
+    const newId = uuidv4();
+    setIsLoading(true);
+
+    try {
+      const { data: newEnrollment, error } = await supabase
+        .from("enrollments")
+        .insert([
+          {
+            id: newId,
+            student_id: user.id,
+            subject_id: subjectId,
+            semester: currentEnrollment.semester,
+            courses_id: currentEnrollment.courses_id,
+            status: "active",
+            created_at: new Date().toISOString(),
+          },
+        ])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Update state
+      setEnrollments((prev) => [newEnrollment, ...prev]);
+
+      // Refresh subjects
+      const { data: updatedSubjects } = await supabase
+        .from("subjects")
+        .select("*");
+      setSubjects(updatedSubjects || []);
+
+      const { data: history, error: historyError } = await supabase
+        .from("enrollments")
+        .select(
+          `
+            id,
+            semester,
+            status,
+            created_at,
+            subjects:subjects!enrollments_subject_id_fkey(count)
+          `
+        )
+        .eq("student_id", user.id)
+        .eq("status", "active")
+        .order("created_at", { ascending: false });
+
+      if (historyError) throw historyError;
+
+      // Transform history data to include subject count and units
+      const transformedHistory = (history || []).map((item) => ({
+        id: item.id,
+        semester: item.semester,
+        status: item.status,
+        subjects_count: item.subjects?.[0]?.count || 0,
+        units: 0, // Will be calculated below
+        created_at: item.created_at,
+      }));
+
+      setEnrollmentHistory(transformedHistory);
+      await LogAction({
+        user_id: user?.id,
+        action: "Enrolled in subject - " + subjectId,
+        module: "Enrollment",
+      });
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Enrollment failed");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDrop = async (subjectId: string) => {
+    if (!user?.id || !currentEnrollment) return;
+
+    setIsLoading(true);
+
+    try {
+      const { error } = await supabase
+        .from("enrollments")
+        .update([
+          {
+            status: "drop",
+          },
+        ])
+        .eq("student_id", user.id)
+        .eq("subject_id", subjectId);
+
+      if (error) throw error;
+
+      const { data: enrollments, error: enrollmentError } = await supabase
+        .from("enrollments")
+        .select("*")
+        .eq("student_id", user.id)
+        .eq("status", "active")
+        .order("created_at", { ascending: false });
+
+      if (enrollmentError) throw enrollmentError;
+
+      setEnrollments(enrollments || []);
+
+      const { data: history, error: historyError } = await supabase
+        .from("enrollments")
+        .select(
+          `
+            id,
+            semester,
+            status,
+            created_at,
+            subjects:subjects!enrollments_subject_id_fkey(count)
+          `
+        )
+        .eq("student_id", user.id)
+        .eq("status", "active")
+        .order("created_at", { ascending: false });
+
+      if (historyError) throw historyError;
+
+      // Transform history data to include subject count and units
+      const transformedHistory = (history || []).map((item) => ({
+        id: item.id,
+        semester: item.semester,
+        status: item.status,
+        subjects_count: item.subjects?.[0]?.count || 0,
+        units: 0, // Will be calculated below
+        created_at: item.created_at,
+      }));
+
+      setEnrollmentHistory(transformedHistory);
+
+      // Refresh subjects
+      const { data: updatedSubjects } = await supabase
+        .from("subjects")
+        .select("*");
+      setSubjects(updatedSubjects || []);
+
+      await LogAction({
+        user_id: user?.id,
+        action: `Dropped subject - ${subjectId}`,
+        module: "Enrollment",
+      });
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Enrollment failed");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -229,21 +393,25 @@ const EnrollmentStatus: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                Enrollment Status
+                Current Enrollment Status
               </p>
-              <div
-                className={`flex items-center space-x-1 mt-2 px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                  enrollmentData?.status || "inactive"
-                )}`}
-              >
-                {getStatusIcon(enrollmentData?.status || "inactive")}
-                <span>
-                  {enrollmentData
-                    ? enrollmentData?.status?.charAt(0).toUpperCase() +
-                        enrollmentData?.status?.slice(1) || "Inactive"
-                    : ""}
-                </span>
-              </div>
+              {currentEnrollment ? (
+                <div
+                  className={`flex items-center space-x-1 mt-2 px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
+                    currentEnrollment.status
+                  )}`}
+                >
+                  {getStatusIcon(currentEnrollment.status)}
+                  <span>
+                    {currentEnrollment.status.charAt(0).toUpperCase() +
+                      currentEnrollment.status.slice(1)}
+                  </span>
+                </div>
+              ) : (
+                <p className="text-gray-500 dark:text-gray-400 mt-2">
+                  No active enrollment
+                </p>
+              )}
             </div>
             <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
               <Users className="h-6 w-6 text-blue-600 dark:text-blue-400" />
@@ -259,7 +427,7 @@ const EnrollmentStatus: React.FC = () => {
                 Current Semester
               </p>
               <p className="text-lg font-bold text-gray-900 dark:text-white mt-1">
-                {enrollmentData?.semester || "N/A"}
+                {currentEnrollment?.semester || "N/A"}
               </p>
             </div>
             <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
@@ -290,10 +458,10 @@ const EnrollmentStatus: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                Total Credits
+                Total Units
               </p>
               <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                {totalCredits}
+                {totalUnits}
               </p>
             </div>
             <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
@@ -315,42 +483,59 @@ const EnrollmentStatus: React.FC = () => {
           <div className="p-6">
             <div className="space-y-4">
               {enrolledSubjects.length > 0 ? (
-                enrolledSubjects.map((subject) => (
-                  <div
-                    key={subject.id}
-                    className="border border-gray-200 dark:border-gray-600 rounded-lg p-4"
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <h3 className="font-medium text-gray-900 dark:text-white">
-                          {subject.name}
-                        </h3>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          {subject.code} • {subject.credits} Credits
-                        </p>
+                <>
+                  {enrolledSubjects
+                    .slice(0, showAllEnrolled ? enrolledSubjects.length : 3)
+                    .map((subject) => (
+                      <div
+                        key={subject.id}
+                        className="border border-gray-200 dark:border-gray-600 rounded-lg p-4"
+                      >
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <h3 className="font-medium text-gray-900 dark:text-white">
+                              {subject.name}
+                            </h3>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                              {subject.code} • {subject.units} Units
+                            </p>
+                          </div>
+                          <span className="bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-200 px-2 py-1 rounded-full text-xs font-medium">
+                            Enrolled
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                          <p>
+                            <strong>Instructor:</strong> {subject.instructor}
+                          </p>
+                          <p>
+                            <strong>Schedule:</strong> {subject.schedule}
+                          </p>
+                          <p>
+                            <strong>Room:</strong> {subject.room}
+                          </p>
+                        </div>
+                        <div className="mt-3 flex space-x-2">
+                          <button
+                            onClick={() => handleDrop(subject.id)}
+                            className="text-red-600 dark:text-red-400 hover:text-red-500 text-sm font-medium"
+                          >
+                            Drop Subject
+                          </button>
+                        </div>
                       </div>
-                      <span className="bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-200 px-2 py-1 rounded-full text-xs font-medium">
-                        Enrolled
-                      </span>
-                    </div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                      <p>
-                        <strong>Instructor:</strong> {subject.instructor}
-                      </p>
-                      <p>
-                        <strong>Schedule:</strong> {subject.schedule}
-                      </p>
-                      <p>
-                        <strong>Room:</strong> {subject.room}
-                      </p>
-                    </div>
-                    <div className="mt-3 flex space-x-2">
-                      <button className="text-red-600 dark:text-red-400 hover:text-red-500 text-sm font-medium">
-                        Drop Subject
-                      </button>
-                    </div>
-                  </div>
-                ))
+                    ))}
+                  {enrolledSubjects.length > 3 && (
+                    <button
+                      onClick={() => setShowAllEnrolled(!showAllEnrolled)}
+                      className="text-blue-600 dark:text-blue-400 hover:text-blue-500 text-sm font-medium w-full text-center py-2"
+                    >
+                      {showAllEnrolled
+                        ? "See Less"
+                        : `See More (${enrolledSubjects.length - 3})`}
+                    </button>
+                  )}
+                </>
               ) : (
                 <p className="text-gray-500 dark:text-gray-400 text-center py-4">
                   No enrolled subjects found
@@ -371,45 +556,60 @@ const EnrollmentStatus: React.FC = () => {
           <div className="p-6">
             <div className="space-y-4">
               {availableSubjects.length > 0 ? (
-                availableSubjects.map((subject) => (
-                  <div
-                    key={subject.id}
-                    className="border border-gray-200 dark:border-gray-600 rounded-lg p-4"
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <h3 className="font-medium text-gray-900 dark:text-white">
-                          {subject.name}
-                        </h3>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          {subject.code} • {subject.credits} Credits
-                        </p>
+                <>
+                  {availableSubjects
+                    .slice(0, showAllAvailable ? availableSubjects.length : 3)
+                    .map((subject) => (
+                      <div
+                        key={subject.id}
+                        className="border border-gray-200 dark:border-gray-600 rounded-lg p-4"
+                      >
+                        <div className="flex justify-between items-start mb-2">
+                          <div>
+                            <h3 className="font-medium text-gray-900 dark:text-white">
+                              {subject.name}
+                            </h3>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                              {subject.code} • {subject.units} Units
+                            </p>
+                          </div>
+                          <span className="bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-2 py-1 rounded-full text-xs font-medium">
+                            Available
+                          </span>
+                        </div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                          <p>
+                            <strong>Instructor:</strong> {subject.instructor}
+                          </p>
+                          <p>
+                            <strong>Schedule:</strong> {subject.schedule}
+                          </p>
+                          <p>
+                            <strong>Room:</strong> {subject.room}
+                          </p>
+                        </div>
+                        <div className="mt-3 flex space-x-2">
+                          <button
+                            onClick={() => handleEnroll(subject.id)}
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm font-medium transition-colors"
+                          >
+                            Enroll
+                          </button>
+                        </div>
                       </div>
-                      <span className="bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 px-2 py-1 rounded-full text-xs font-medium">
-                        Available
-                      </span>
-                    </div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                      <p>
-                        <strong>Instructor:</strong> {subject.instructor}
-                      </p>
-                      <p>
-                        <strong>Schedule:</strong> {subject.schedule}
-                      </p>
-                      <p>
-                        <strong>Room:</strong> {subject.room}
-                      </p>
-                    </div>
-                    <div className="mt-3 flex space-x-2">
-                      <button className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm font-medium transition-colors">
-                        Enroll
-                      </button>
-                      <button className="text-blue-600 dark:text-blue-400 hover:text-blue-500 text-sm font-medium">
-                        View Details
-                      </button>
-                    </div>
-                  </div>
-                ))
+                    ))}
+
+                  {availableSubjects.length > 3 && (
+                    <button
+                      onClick={() => setShowAllAvailable(!showAllAvailable)}
+                      className="w-full text-center text-blue-600 dark:text-blue-400 hover:text-blue-500 text-sm font-medium py-2"
+                    >
+                      {showAllAvailable
+                        ? "Show Less"
+                        : `See All (${availableSubjects.length})`}
+                    </button>
+                  )}
+                </>
               ) : (
                 <p className="text-gray-500 dark:text-gray-400 text-center py-4">
                   No available subjects found
@@ -440,7 +640,7 @@ const EnrollmentStatus: React.FC = () => {
                   Subjects
                 </th>
                 <th className="text-center py-3 px-4 font-semibold text-gray-900 dark:text-white">
-                  Credits
+                  Units
                 </th>
                 <th className="text-center py-3 px-4 font-semibold text-gray-900 dark:text-white">
                   Date Enrolled
@@ -471,7 +671,7 @@ const EnrollmentStatus: React.FC = () => {
                       {history.subjects_count}
                     </td>
                     <td className="py-4 px-4 text-center text-gray-900 dark:text-white">
-                      {history.credits}
+                      {history.units}
                     </td>
                     <td className="py-4 px-4 text-center text-gray-600 dark:text-gray-400">
                       {new Date(history.created_at).toLocaleDateString()}

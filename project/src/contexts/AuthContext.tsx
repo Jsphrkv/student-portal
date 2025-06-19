@@ -10,11 +10,13 @@ import {
   Student,
   StudentRegistrationData,
   AuthContextType,
+  Course,
 } from "../types";
 import { supabase } from "../../lib/supabase";
 // import { v4 as uuidv4 } from "uuid";
 import { useNavigate } from "react-router-dom";
 import { LoginData } from "../types"; // Adjust the import path as necessary
+import { LogAction } from "../../utils/logger";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -35,6 +37,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [student, setStudent] = useState<Student | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [courses, setCourses] = useState<Course[]>([]);
 
   const clearError = () => setError(null);
 
@@ -71,6 +74,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           role: userProfile.role,
           created_at: userProfile.created_at,
         };
+
+        await LogAction({
+          user_id: userProfile.id,
+          action: "Logged in",
+          module: "Login Form",
+        });
 
         setUser(userData);
 
@@ -156,6 +165,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               section: studentData.section,
               contact: parseInt(studentData.contact),
               student_id: newStudentID,
+              courses_id: studentData.course_id,
               user_id: data.user.id, // Reference the user's ID
             },
           ])
@@ -175,6 +185,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
         setUser(userData);
         setStudent(studentProfile);
+
+        const currentPath = window.location.pathname;
+        if (userData.role === "admin" && !currentPath.startsWith("/admin")) {
+          navigate("/admin/dashboard");
+        } else if (
+          userData.role === "student" &&
+          currentPath !== "/dashboard"
+        ) {
+          navigate("/dashboard");
+        }
       }
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -195,6 +215,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       await supabase.auth.signOut();
       setUser(null);
       setStudent(null);
+
+      await LogAction({
+        user_id: user?.id,
+        action: "Logged out",
+        module: "Auth",
+      });
     } catch (err: unknown) {
       if (err instanceof Error) {
         console.error(err.message);
@@ -247,6 +273,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           }
         }
       }
+
+      const { data: courseData, error: courseError } = await supabase
+        .from("courses")
+        .select("*");
+
+      if (courseError) {
+        console.error("Error fetching course data:", courseError);
+        return;
+      }
+
+      setCourses(courseData || []);
     };
 
     checkSession();
@@ -273,6 +310,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     register,
     logout,
     clearError,
+    courses,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

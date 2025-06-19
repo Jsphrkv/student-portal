@@ -3,7 +3,6 @@ import { BookOpen, Download, Calendar, TrendingUp, Award } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import LoadingSpinner from "../shared/LoadingSpinner";
 import { supabase } from "../../../lib/supabase";
-
 interface Grade {
   id: string;
   student_id: string;
@@ -12,17 +11,20 @@ interface Grade {
   semester: string;
   grade: number;
   created_at: string;
+  subjects: Subject;
 }
 
 interface Subject {
   id: string;
   name: string;
   created_at: string;
+  code: string;
 }
 
 const AcademicRecords: React.FC = () => {
   const { user } = useAuth();
   const [grades, setGrades] = useState<Grade[]>([]);
+  const [showAll, setShowAll] = useState(false);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -36,34 +38,45 @@ const AcademicRecords: React.FC = () => {
       setError(null);
 
       try {
-        // Fetch grades for the current student
+        // Enhanced grades query with related subject data
         const { data: gradesData, error: gradesError } = await supabase
           .from("grades")
-          .select("*")
+          .select(
+            `
+            *,
+            subjects:subjects_id(id, name, code),
+            courses:courses!grades_course_id_fkey(id, name)
+          `
+          )
           .eq("student_id", user.id)
+          .order("semester", { ascending: false })
           .order("created_at", { ascending: false });
 
         if (gradesError) throw gradesError;
 
-        // Fetch subjects (if needed for additional info)
+        // Optional: Only fetch all subjects if needed elsewhere
         const { data: subjectsData, error: subjectsError } = await supabase
           .from("subjects")
-          .select("id, name, created_at");
+          .select<"id, name, code", Subject>("id, name, code")
+          .order("name", { ascending: true });
 
         if (subjectsError) throw subjectsError;
 
         setGrades(gradesData || []);
         setSubjects(subjectsData || []);
-      } catch (error) {
+      } catch (error: unknown) {
         console.error("Error fetching academic records:", error);
-        setError("Failed to load academic records. Please try again.");
+        setError(
+          (error as { message?: string }).message ||
+            "Failed to load academic records. Please try again."
+        );
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchAcademicData();
-  }, [user]);
+  }, [user?.id]);
 
   const getLetterGrade = (numericGrade: number) => {
     if (numericGrade >= 97) return "A+";
@@ -143,7 +156,7 @@ const AcademicRecords: React.FC = () => {
             View your grades, GPA, and academic performance
           </p>
         </div>
-        <button
+        {/* <button
           className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
           onClick={() => {
             // Implement transcript download functionality
@@ -152,7 +165,7 @@ const AcademicRecords: React.FC = () => {
         >
           <Download className="h-4 w-4" />
           <span>Download Transcript</span>
-        </button>
+        </button> */}
       </div>
 
       {/* Academic Summary */}
@@ -238,18 +251,23 @@ const AcademicRecords: React.FC = () => {
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
             Grade Records
           </h2>
-          <select
-            value={selectedSemester}
-            onChange={(e) => setSelectedSemester(e.target.value)}
-            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-          >
-            <option value="All">All Semesters</option>
-            {semesters.map((semester) => (
-              <option key={semester} value={semester}>
-                {semester}
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center space-x-4">
+            <select
+              value={selectedSemester}
+              onChange={(e) => {
+                setSelectedSemester(e.target.value);
+                setShowAll(false); // Reset to showing limited records when semester changes
+              }}
+              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            >
+              <option value="All">All Semesters</option>
+              {semesters.map((semester) => (
+                <option key={semester} value={semester}>
+                  {semester}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -257,7 +275,7 @@ const AcademicRecords: React.FC = () => {
             <thead>
               <tr className="border-b border-gray-200 dark:border-gray-700">
                 <th className="text-left py-3 px-4 font-semibold text-gray-900 dark:text-white">
-                  Subjectz
+                  Subjects
                 </th>
                 <th className="text-left py-3 px-4 font-semibold text-gray-900 dark:text-white">
                   Semester
@@ -275,40 +293,46 @@ const AcademicRecords: React.FC = () => {
             </thead>
             <tbody>
               {filteredGrades.length > 0 ? (
-                filteredGrades.map((grade) => (
-                  <tr
-                    key={grade.id}
-                    className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50"
-                  >
-                    <td className="py-4 px-4">
-                      <div className="font-medium text-gray-900 dark:text-white">
-                        {grade.subject_name}
-                      </div>
-                    </td>
-                    <td className="py-4 px-4 text-gray-600 dark:text-gray-400">
-                      {grade.semester}
-                    </td>
-                    <td className="py-4 px-4 text-center">
-                      <span
-                        className={`font-bold ${getGradeColor(grade.grade)}`}
+                <>
+                  {(showAll ? filteredGrades : filteredGrades.slice(0, 10)).map(
+                    (grade) => (
+                      <tr
+                        key={grade.id}
+                        className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50"
                       >
-                        {grade.grade}
-                      </span>
-                    </td>
-                    <td className="py-4 px-4 text-center">
-                      <span
-                        className={`font-bold text-lg ${getGradeColor(
-                          grade.grade
-                        )}`}
-                      >
-                        {getLetterGrade(grade.grade)}
-                      </span>
-                    </td>
-                    <td className="py-4 px-4 text-center text-gray-600 dark:text-gray-400">
-                      {new Date(grade.created_at).toLocaleDateString()}
-                    </td>
-                  </tr>
-                ))
+                        <td className="py-4 px-4">
+                          <div className="font-medium text-gray-900 dark:text-white">
+                            {grade.subjects.name}
+                          </div>
+                        </td>
+                        <td className="py-4 px-4 text-gray-600 dark:text-gray-400">
+                          {grade.semester}
+                        </td>
+                        <td className="py-4 px-4 text-center">
+                          <span
+                            className={`font-bold ${getGradeColor(
+                              grade.grade
+                            )}`}
+                          >
+                            {grade.grade}
+                          </span>
+                        </td>
+                        <td className="py-4 px-4 text-center">
+                          <span
+                            className={`font-bold text-lg ${getGradeColor(
+                              grade.grade
+                            )}`}
+                          >
+                            {getLetterGrade(grade.grade)}
+                          </span>
+                        </td>
+                        <td className="py-4 px-4 text-center text-gray-600 dark:text-gray-400">
+                          {new Date(grade.created_at).toLocaleDateString()}
+                        </td>
+                      </tr>
+                    )
+                  )}
+                </>
               ) : (
                 <tr>
                   <td colSpan={5} className="py-8 text-center">
@@ -324,6 +348,18 @@ const AcademicRecords: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        {/* See More/Less button */}
+        {filteredGrades.length > 10 && (
+          <div className="mt-4 flex justify-center">
+            <button
+              onClick={() => setShowAll(!showAll)}
+              className="px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-lg transition-colors"
+            >
+              {showAll ? "Show Less" : `Show All (${filteredGrades.length})`}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,68 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { supabase } from "../../../lib/supabase";
-import {
-  Clock,
-  User,
-  AlertCircle,
-  Edit3,
-  Trash2,
-  Plus,
-  Eye,
-  Bell,
-} from "lucide-react";
+import { Clock, User, AlertCircle, Eye } from "lucide-react";
 
-// Audit Log Utility
-const logAction = async ({
-  userId,
-  userRole,
-  actionType,
-  tableAffected,
-  recordId,
-  oldValues,
-  newValues,
-}: {
-  userId?: string;
-  userRole: string;
-  actionType: string;
-  tableAffected: string;
-  recordId?: string;
-  oldValues?: Record<string, any>;
-  newValues?: Record<string, any>;
-}) => {
-  try {
-    const { error } = await supabase.from("audit_logs").insert({
-      user_id: userId,
-      user_role: userRole,
-      action_type: actionType,
-      table_affected: tableAffected,
-      record_id: recordId,
-      old_values: oldValues,
-      new_values: newValues,
-    });
-
-    if (error) {
-      console.error("Error logging action:", error);
-      return false;
-    }
-    return true;
-  } catch (err) {
-    console.error("Failed to log action:", err);
-    return false;
-  }
-};
-
-// AuditTrail Component
 interface AuditLog {
   id: number;
   user_id: string;
-  user_role: string;
-  action_type: string;
-  table_affected: string;
-  record_id: string;
-  old_values: any;
-  new_values: any;
   created_at: string;
+  action: string;
+  ip_address: string;
+  module: string;
   user?: {
     first_name: string;
     last_name: string;
@@ -87,7 +34,9 @@ export const AuditLogs: React.FC = () => {
       try {
         let query = supabase
           .from("audit_logs")
-          .select(`*, user:users(first_name, last_name, email)`)
+          .select(
+            `id, user_id, created_at, action, ip_address, module, user:users(first_name, last_name)`
+          )
           .order("created_at", { ascending: false })
           .limit(limit);
 
@@ -110,15 +59,11 @@ export const AuditLogs: React.FC = () => {
     fetchAuditLogs();
   }, [user?.id, user?.role, limit]);
 
-  const getActionIcon = (actionType: string) => {
-    switch (actionType) {
-      case "CREATE":
-        return <Plus className="h-4 w-4" />;
-      case "UPDATE":
-        return <Edit3 className="h-4 w-4" />;
-      case "DELETE":
-        return <Trash2 className="h-4 w-4" />;
-      case "READ":
+  const getActionIcon = (action: string) => {
+    switch (action.toLowerCase()) {
+      case "login":
+        return <User className="h-4 w-4" />;
+      case "view":
         return <Eye className="h-4 w-4" />;
       default:
         return <AlertCircle className="h-4 w-4" />;
@@ -129,21 +74,7 @@ export const AuditLogs: React.FC = () => {
     const userName = log.user
       ? `${log.user.first_name} ${log.user.last_name}`
       : "System";
-    return `${userName} (${log.user_role}) ${log.action_type.toLowerCase()}d ${
-      log.table_affected
-    }${log.record_id ? ` (ID: ${log.record_id})` : ""}`;
-  };
-
-  const formatJsonData = (data: any) => {
-    if (!data) return null;
-    return Object.entries(data).map(([key, value]) => (
-      <div key={key} className="text-xs mt-1">
-        <span className="font-medium">{key}:</span>{" "}
-        <span className="text-gray-600 dark:text-gray-400">
-          {JSON.stringify(value)}
-        </span>
-      </div>
-    ));
+    return `${userName} ${log.action} ${log.module}`;
   };
 
   if (!user) {
@@ -179,7 +110,7 @@ export const AuditLogs: React.FC = () => {
             <Clock className="h-8 w-8 text-blue-600 dark:text-blue-400" />
             <div>
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                Audit Trail
+                Audit Logs
               </h1>
               <p className="text-gray-600 dark:text-gray-400">
                 {user.role === "admin"
@@ -203,18 +134,8 @@ export const AuditLogs: React.FC = () => {
               className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6"
             >
               <div className="flex items-start space-x-3">
-                <div
-                  className={`flex-shrink-0 p-2 rounded-full ${
-                    log.action_type === "CREATE"
-                      ? "bg-green-100 dark:bg-green-900/20"
-                      : log.action_type === "UPDATE"
-                      ? "bg-blue-100 dark:bg-blue-900/20"
-                      : log.action_type === "DELETE"
-                      ? "bg-red-100 dark:bg-red-900/20"
-                      : "bg-gray-100 dark:bg-gray-700"
-                  }`}
-                >
-                  {getActionIcon(log.action_type)}
+                <div className="flex-shrink-0 p-2 rounded-full bg-gray-100 dark:bg-gray-700">
+                  {getActionIcon(log.action)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 dark:text-white">
@@ -224,28 +145,15 @@ export const AuditLogs: React.FC = () => {
                     <Clock className="h-3 w-3 inline mr-1" />
                     {new Date(log.created_at).toLocaleString()}
                   </p>
-
-                  {log.old_values && (
-                    <div className="mt-3">
-                      <p className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                        Previous Values:
-                      </p>
-                      <div className="text-xs bg-gray-50 dark:bg-gray-700 p-2 rounded mt-1">
-                        {formatJsonData(log.old_values)}
-                      </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="font-medium">IP:</span> {log.ip_address}
                     </div>
-                  )}
-
-                  {log.new_values && (
-                    <div className="mt-2">
-                      <p className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                        New Values:
-                      </p>
-                      <div className="text-xs bg-gray-50 dark:bg-gray-700 p-2 rounded mt-1">
-                        {formatJsonData(log.new_values)}
-                      </div>
+                    <div>
+                      <span className="font-medium">User ID:</span>{" "}
+                      {log.user_id}
                     </div>
-                  )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -265,31 +173,6 @@ export const AuditLogs: React.FC = () => {
       )}
     </div>
   );
-};
-
-// Example usage in other components
-export const useAuditLog = () => {
-  const { user } = useAuth();
-
-  return {
-    logAction: async (
-      actionType: string,
-      tableAffected: string,
-      recordId?: string,
-      oldValues?: Record<string, any>,
-      newValues?: Record<string, any>
-    ) => {
-      await logAction({
-        userId: user?.id,
-        userRole: user?.role || "unknown",
-        actionType,
-        tableAffected,
-        recordId,
-        oldValues,
-        newValues,
-      });
-    },
-  };
 };
 
 export default AuditLogs;

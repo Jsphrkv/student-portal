@@ -1,22 +1,38 @@
 import React from "react";
-import { LogOut, Moon, Sun, User } from "lucide-react";
+import { LogOut, Moon, Sun, User, Menu, X } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useTheme } from "../../contexts/ThemeContext";
 
-const Header: React.FC = () => {
+interface HeaderProps {
+  isSidebarOpen: boolean;
+  setSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+const Header: React.FC<HeaderProps> = ({ isSidebarOpen, setSidebarOpen }) => {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
 
   return (
-    <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm">
+    <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm fixed top-0 left-0 w-full z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <div className="flex items-center space-x-4">
-            <div className="flex-shrink-0">
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-                University Portal
-              </h1>
-            </div>
+            {/* Toggle Button for Sidebar (Mobile Only) */}
+            <button
+              onClick={() => setSidebarOpen(!isSidebarOpen)}
+              className="md:hidden p-2 text-gray-700 dark:text-white"
+              aria-label="Toggle sidebar"
+            >
+              {isSidebarOpen ? (
+                <X className="w-6 h-6" />
+              ) : (
+                <Menu className="w-6 h-6" />
+              )}
+            </button>
+
+            <h1 className="text-xl font-bold text-gray-900 dark:text-white">
+              University Portal
+            </h1>
           </div>
 
           <div className="flex items-center space-x-4">

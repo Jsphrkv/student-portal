@@ -75,6 +75,11 @@ export interface Announcement {
   content: string;
   created_at: string;
 }
+
+export interface Course {
+  id: string;
+  name: string;
+}
 export interface AuditLog {
   id: string;
   user_id: string;
@@ -92,6 +97,7 @@ export interface AuthContextType {
   student: Student | null;
   isLoading: boolean;
   error: string | null;
+  courses: Course[] | null;
   login: (data: LoginData) => Promise<void>;
   register: (data: StudentRegistrationData) => Promise<void>;
   logout: () => Promise<void>;
@@ -109,6 +115,7 @@ export interface StudentRegistrationData {
   sex: string;
   section: string;
   contact: string;
+  course_id: string;
 }
 
 export interface LoginData {

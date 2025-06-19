@@ -10,6 +10,7 @@ import {
 import { supabase } from "../../../lib/supabase";
 import { useAuth } from "../../contexts/AuthContext";
 import LoadingSpinner from "../shared/LoadingSpinner";
+import { LogAction } from "../../../utils/logger";
 
 interface SupportTicket {
   id: number;
@@ -105,6 +106,12 @@ const SupportAdmin: React.FC = () => {
       await fetchTickets();
       setSelectedTicket(null);
       setResponseText("");
+
+      await LogAction({
+        user_id: user?.id,
+        action: `Ticket ${ticketId} ${status}`,
+        module: "Support",
+      });
     } catch (error) {
       console.error("Error updating ticket:", error);
     }
@@ -120,6 +127,12 @@ const SupportAdmin: React.FC = () => {
 
         if (error) throw error;
         await fetchTickets();
+
+        await LogAction({
+          user_id: user?.id,
+          action: `Deleted ticket ${ticketId}`,
+          module: "Support",
+        });
       } catch (error) {
         console.error("Error deleting ticket:", error);
       }

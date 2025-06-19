@@ -8,16 +8,19 @@ import {
   CreditCard,
   FileText,
   Users,
-  // GraduationCap,
   DollarSign,
-  // Settings,
   Activity,
   BarChart3,
   HelpCircle,
 } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 
-const Sidebar: React.FC = () => {
+interface SidebarProps {
+  isSidebarOpen: boolean;
+  setSidebarOpen: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+const Sidebar: React.FC<SidebarProps> = ({ isSidebarOpen, setSidebarOpen }) => {
   const { user } = useAuth();
 
   const studentLinks = [
@@ -33,28 +36,32 @@ const Sidebar: React.FC = () => {
   const adminLinks = [
     { to: "/admin/dashboard", icon: Home, label: "Dashboard" },
     { to: "/admin/students", icon: Users, label: "Students" },
-    { to: "admin/announcementAdmin", icon: FileText, label: "Announcements" },
+    { to: "/admin/announcementAdmin", icon: FileText, label: "Announcements" },
     { to: "/admin/AnalyticsAdmin", icon: BarChart3, label: "Analytics" },
     {
       to: "/admin/financialAdmin",
       icon: DollarSign,
       label: "Payment Management",
     },
-    // { to: "/admin/settings", icon: Settings, label: "Settings" },
     { to: "/admin/AuditLogs", icon: Activity, label: "Audit Trail" },
-    { to: "admin/supportAdmin", icon: HelpCircle, label: "Support" },
+    { to: "/admin/supportAdmin", icon: HelpCircle, label: "Support" },
   ];
 
   const links = user?.role === "admin" ? adminLinks : studentLinks;
 
   return (
-    <aside className="bg-gray-50 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 w-64 min-h-screen">
-      <nav className="mt-8 px-4">
+    <aside
+      className={`fixed top-0 left-0 h-full w-64 bg-gray-50 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700 transform transition-transform duration-300 ease-in-out z-40 ${
+        isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+      } md:translate-x-0 md:static md:block mt-16`}
+    >
+      <nav className="px-4 py-6">
         <ul className="space-y-2">
           {links.map((link) => (
             <li key={link.to}>
               <NavLink
                 to={link.to}
+                onClick={() => setSidebarOpen(false)}
                 className={({ isActive }) =>
                   `flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
                     isActive

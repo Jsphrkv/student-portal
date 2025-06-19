@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { User, Mail, Phone, MapPin, Heart, Save, Edit3 } from "lucide-react";
 import { supabase } from "../../../lib/supabase"; // Make sure this is properly initialized
+import { LogAction } from "../../../utils/logger"; // Adjust the import path as necessary
 
 interface Users {
   id?: string;
@@ -15,19 +16,28 @@ const Profile: React.FC = () => {
     lastName: "",
     email: "",
     phone: "",
+    age: "",
+    sex: "",
     address: "",
+    section: "",
+    year: "",
     emergency_contact_name: "",
     emergency_contact_number: "",
     emergency_contact_relationship: "",
+    course_code: "", // Add this line
   });
 
-  const handleSave = () => {
+  const handleSave = async () => {
     // API call to save profile data
     supabase
       .from("student")
       .update({
         contact: formData.phone,
         address: formData.address,
+        age: formData.age,
+        sex: formData.sex,
+        section: formData.section,
+        year: formData.year,
         emergency_contact_name: formData.emergency_contact_name,
         emergency_contact_number: formData.emergency_contact_number,
         emergency_contact_relationship: formData.emergency_contact_relationship,
@@ -42,6 +52,12 @@ const Profile: React.FC = () => {
       });
 
     setIsEditing(false);
+
+    await LogAction({
+      user_id: user?.id,
+      action: "Edit User Profile",
+      module: "Profile",
+    });
   };
 
   useEffect(() => {
@@ -62,7 +78,12 @@ const Profile: React.FC = () => {
       // Fetch from student table
       const { data: studentData, error: studentError } = await supabase
         .from("student")
-        .select("*")
+        .select(
+          `
+          *,
+          course:courses!student_courses_id_fkey(code)
+        `
+        )
         .eq("id", userId)
         .single();
 
@@ -90,11 +111,16 @@ const Profile: React.FC = () => {
         lastName: userData.last_name,
         email: userData.email,
         phone: studentData.contact,
+        age: studentData.age || "",
+        sex: studentData.sex || "",
         address: studentData.address || "",
+        section: studentData.section || "",
+        year: studentData.year || "",
         emergency_contact_name: studentData.emergency_contact_name || "",
         emergency_contact_number: studentData.emergency_contact_number || "",
         emergency_contact_relationship:
           studentData.emergency_contact_relationship || "",
+        course_code: studentData.course?.code || "Not enrolled",
       });
     };
 
@@ -149,7 +175,7 @@ const Profile: React.FC = () => {
               Student ID: {formData.student_id}
             </p>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-              Computer Science
+              Course: {formData.course_code || "Not enrolled"}
             </p>
             <div className="mt-4 flex justify-center">
               <span className="bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-200 px-3 py-1 rounded-full text-sm font-medium">
@@ -166,6 +192,7 @@ const Profile: React.FC = () => {
               Personal Information
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* First Name */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   First Name
@@ -185,6 +212,8 @@ const Profile: React.FC = () => {
                   </p>
                 )}
               </div>
+
+              {/* Last Name */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Last Name
@@ -204,9 +233,100 @@ const Profile: React.FC = () => {
                   </p>
                 )}
               </div>
+
+              {/* Age */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Age
+                </label>
+                {isEditing ? (
+                  <input
+                    type="number"
+                    min="15"
+                    max="99"
+                    value={formData.age}
+                    onChange={(e) => handleInputChange("age", e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  />
+                ) : (
+                  <p className="text-gray-900 dark:text-white">
+                    {formData.age}
+                  </p>
+                )}
+              </div>
+
+              {/* Sex */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Sex
+                </label>
+                {isEditing ? (
+                  <select
+                    value={formData.sex}
+                    onChange={(e) => handleInputChange("sex", e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  >
+                    <option value="">Select Sex</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="other">Other</option>
+                  </select>
+                ) : (
+                  <p className="text-gray-900 dark:text-white">
+                    {formData.sex.charAt(0).toUpperCase() +
+                      formData.sex.slice(1)}
+                  </p>
+                )}
+              </div>
+
+              {/* Section */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Section
+                </label>
+                {isEditing ? (
+                  <input
+                    type="text"
+                    value={formData.section}
+                    onChange={(e) =>
+                      handleInputChange("section", e.target.value)
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  />
+                ) : (
+                  <p className="text-gray-900 dark:text-white">
+                    {formData.section}
+                  </p>
+                )}
+              </div>
+
+              {/* Year Level */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Year Level
+                </label>
+                {isEditing ? (
+                  <select
+                    value={formData.year}
+                    onChange={(e) => handleInputChange("year", e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  >
+                    <option value="">Select Year Level</option>
+                    <option value="1st Year">1st Year</option>
+                    <option value="2nd Year">2nd Year</option>
+                    <option value="3rd Year">3rd Year</option>
+                  </select>
+                ) : (
+                  <p className="text-gray-900 dark:text-white">
+                    {formData.year}
+                  </p>
+                )}
+              </div>
             </div>
 
+            {/* Rest of your fields (Email, Phone, Address) */}
             <div className="mt-4 space-y-4">
+              {/* Email */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   <Mail className="inline h-4 w-4 mr-1" />
@@ -226,6 +346,7 @@ const Profile: React.FC = () => {
                 )}
               </div>
 
+              {/* Phone */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   <Phone className="inline h-4 w-4 mr-1" />
@@ -245,6 +366,7 @@ const Profile: React.FC = () => {
                 )}
               </div>
 
+              {/* Address */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   <MapPin className="inline h-4 w-4 mr-1" />

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { Bell, Plus, Edit3, Trash2, Calendar, AlertCircle } from "lucide-react";
 import { supabase } from "../../../lib/supabase";
+import { LogAction } from "../../../utils/logger";
 
 interface Announcement {
   id: number;
@@ -174,6 +175,12 @@ const AnnouncementAdmin: React.FC = () => {
             ann.id === editingAnnouncement.id ? updatedAnnouncement : ann
           )
         );
+
+        await LogAction({
+          user_id: user?.id,
+          action: "Created/Updated announcement",
+          module: "Announcement Admin",
+        });
       } else {
         // CREATE new announcement
         const { data, error } = await supabase
@@ -223,6 +230,12 @@ const AnnouncementAdmin: React.FC = () => {
           .eq("id", id);
 
         if (error) throw error;
+
+        await LogAction({
+          user_id: user?.id,
+          action: "Deleted announcement",
+          module: "Announcement Admin",
+        });
       } catch (err: unknown) {
         if (err instanceof Error) {
           setError(err.message);

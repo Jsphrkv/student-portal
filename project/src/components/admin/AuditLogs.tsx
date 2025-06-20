@@ -74,7 +74,7 @@ export const AuditLogs: React.FC = () => {
     const userName = log.user
       ? `${log.user.first_name} ${log.user.last_name}`
       : "System";
-    return `${userName} ${log.action} ${log.module}`;
+    return `${userName} ${log.action} in Module (${log.module})`;
   };
 
   if (!user) {

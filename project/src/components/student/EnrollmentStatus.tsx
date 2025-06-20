@@ -36,6 +36,7 @@ interface EnrollmentHistory {
   semester: string;
   status: "active" | "inactive" | "pending";
   subjects_count: number;
+  subject_name: string;
   units: number;
   created_at: string;
 }
@@ -102,19 +103,9 @@ const EnrollmentStatus: React.FC = () => {
 
         // Fetch enrollment history
         const { data: history, error: historyError } = await supabase
-          .from("enrollments")
-          .select(
-            `
-            id,
-            semester,
-            status,
-            created_at,
-            subjects:subjects!enrollments_subject_id_fkey(count)
-          `
-          )
-          .eq("student_id", user.id)
-          .eq("status", "active")
-          .order("created_at", { ascending: false });
+          .from("enrolled_history_subjects")
+          .select("*")
+          .eq("student_id", user.id);
 
         if (historyError) throw historyError;
 
@@ -123,7 +114,8 @@ const EnrollmentStatus: React.FC = () => {
           id: item.id,
           semester: item.semester,
           status: item.status,
-          subjects_count: item.subjects?.[0]?.count || 0,
+          subjects_count: item.count,
+          subject_name: item.name,
           units: 0, // Will be calculated below
           created_at: item.created_at,
         }));
@@ -341,6 +333,7 @@ const EnrollmentStatus: React.FC = () => {
               subjects_count: periodSubjects.length,
               units: totalUnits,
               created_at: enrollment.created_at,
+              subject_name: "",
             };
           })
         );
@@ -350,7 +343,7 @@ const EnrollmentStatus: React.FC = () => {
 
       await LogAction({
         user_id: user?.id,
-        action: "Enrolled in subject - " + subjectId,
+        action: "Enrolled in subject",
         module: "Enrollment",
       });
     } catch (error) {
@@ -390,19 +383,9 @@ const EnrollmentStatus: React.FC = () => {
       setEnrollments(enrollments || []);
 
       const { data: history, error: historyError } = await supabase
-        .from("enrollments")
-        .select(
-          `
-            id,
-            semester,
-            status,
-            created_at,
-            subjects:subjects!enrollments_subject_id_fkey(count)
-          `
-        )
-        .eq("student_id", user.id)
-        .eq("status", "active")
-        .order("created_at", { ascending: false });
+        .from("enrolled_history_subjects")
+        .select("*")
+        .eq("student_id", user.id);
 
       if (historyError) throw historyError;
 
@@ -411,7 +394,8 @@ const EnrollmentStatus: React.FC = () => {
         id: item.id,
         semester: item.semester,
         status: item.status,
-        subjects_count: item.subjects?.[0]?.count || 0,
+        subjects_count: item.count,
+        subject_name: item.name,
         units: 0, // Will be calculated below
         created_at: item.created_at,
       }));
@@ -716,7 +700,7 @@ const EnrollmentStatus: React.FC = () => {
                     className="border-b border-gray-100 dark:border-gray-700"
                   >
                     <td className="py-4 px-4 font-medium text-gray-900 dark:text-white">
-                      {history.semester}
+                      {history.semester} - {history.subject_name}
                     </td>
                     <td className="py-4 px-4 text-center">
                       <span

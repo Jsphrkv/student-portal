@@ -4,6 +4,7 @@ import { Users, ChevronDown, ChevronUp } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import LoadingSpinner from "../shared/LoadingSpinner";
 import { supabase } from "../../../lib/supabase";
+import { v4 as uuidv4 } from "uuid";
 
 interface Student {
   id: string;
@@ -14,14 +15,6 @@ interface Student {
   section: string;
 }
 
-// interface Assignment {
-//   id: number;
-//   course: string;
-//   title: string;
-//   dueDate: string;
-//   priority: string;
-// }
-
 interface Grade {
   id: string;
   subject_name: string;
@@ -30,6 +23,17 @@ interface Grade {
   student_id: string;
 }
 
+interface Subjects {
+  id: string;
+  name: string;
+  code: string;
+  instructor: string;
+  student_id: string;
+  subject_id: string;
+  course_id: string;
+  semester: string;
+  grade?: number; // Optional, if grades are included in subjects
+}
 interface Payment {
   id: string;
   amount: number;
@@ -37,6 +41,14 @@ interface Payment {
   due_date?: string;
   status: string;
   student_id: string;
+}
+
+interface CurSub {
+  student_id: string;
+  subject_id: string;
+  course_id?: string;
+  semester?: string;
+  name?: string;
 }
 
 const Students: React.FC = () => {
@@ -50,6 +62,10 @@ const Students: React.FC = () => {
   const [showYearSelection, setShowYearSelection] = useState(true);
   const [showSectionSelection, setShowSectionSelection] = useState(false);
   const [expandedStudent, setExpandedStudent] = useState<string | null>(null);
+  const [subjectsData, setSubjectsData] = useState<Subjects[]>([]); // Adjust type as needed
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [currentSubject, setCurrentSubject] = useState<CurSub | null>(null);
 
   const sections = ["A-AM", "A-PM", "B", "C"]; // Example sections
 
@@ -109,13 +125,63 @@ const Students: React.FC = () => {
 
       // 5. Fetch related data
       const studentIds = formattedStudents.map((s) => s.id);
-      const [{ data: grades }, { data: payments }] = await Promise.all([
-        supabase.from("grades").select("*").in("student_id", studentIds),
+      const [
+        { data: grades },
+        { data: payments },
+        { data: subjectsEnrolled },
+        { data: gradeEnrolledSub },
+      ] = await Promise.all([
+        supabase
+          .from("grades")
+          .select("* , subjects:subjects_id(*)")
+          .in("student_id", studentIds),
         supabase.from("payments").select("*").in("student_id", studentIds),
+        await supabase
+          .from("enrollments")
+          .select(
+            `
+    *,
+    subjects:subject_id (id, name, code, instructor)
+  `
+          )
+          .in("student_id", studentIds),
+        await supabase.from("grades").select("*").in("student_id", studentIds),
       ]);
 
-      setGradesData(grades || []);
+      const mergedData = subjectsEnrolled?.map((subjectsEnrolled) => ({
+        ...subjectsEnrolled,
+        grade:
+          gradeEnrolledSub?.find(
+            (g) =>
+              g.subject_id === subjectsEnrolled.subject_id &&
+              g.student_id === subjectsEnrolled.student_id
+          )?.grade || null,
+      }));
+
+      const gradesDataMap = grades?.map((grd) => ({
+        id: grd.id,
+        grade: grd.grade,
+        subject_name: grd.subjects.name,
+        semester: grd.semester,
+        student_id: grd.student_id,
+      }));
+
+      const subEnrolledData =
+        mergedData?.map((enrollment) => ({
+          id: enrollment.id,
+          student_id: enrollment.student_id,
+          name: enrollment.subjects.name,
+          code: enrollment.subjects.code,
+          instructor: enrollment.subjects.instructor,
+          subject_id: enrollment.subjects.id,
+          course_id: enrollment.courses_id,
+          semester: enrollment.semester,
+          grade: enrollment.grades?.grade || null, // Assuming grades is optional
+        })) || [];
+
+      setGradesData(gradesDataMap || []);
       setPaymentsData(payments || []);
+      setSubjectsData(subEnrolledData || []);
     } catch (error) {
       console.error("Error fetching data:", error);
       // Handle error appropriately
@@ -183,6 +249,42 @@ const Students: React.FC = () => {
       </div>
     );
   }
+
+  // Handle opening modal
+  const handleAddGradeClick = (subjectId: string, studentId: string) => {
+    const subject = subjectsData.find((s) => s.subject_id === subjectId);
+    setCurrentSubject({
+      subject_id: subjectId,
+      student_id: studentId,
+      name: subject?.name,
+      course_id: subject?.course_id,
+      semester: subject?.semester,
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleGradeSubmit = async (grade: string) => {
+    if (!grade || !currentSubject) return;
+    const newId = uuidv4();
+    try {
+      await supabase.from("grades").insert({
+        id: newId,
+        grade: grade,
+        student_id: currentSubject.student_id,
+        subjects_id: currentSubject.subject_id,
+        course_id: currentSubject.course_id,
+        semester: currentSubject.semester,
+        created_at: new Date().toISOString(),
+      });
+
+      // Refresh the data
+      await fetchStudents();
+    } catch (error) {
+      console.error("Error submitting grade:", error);
+    } finally {
+      setIsModalOpen(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -470,6 +572,78 @@ const Students: React.FC = () => {
                               </div>
                             </div>
                           </div>
+                          {/* Enrolled Subject Section */}
+                          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+                            <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                              <h3 className="text-md font-semibold text-gray-900 dark:text-white">
+                                Enrolled Subjects
+                              </h3>
+                            </div>
+
+                            <div className="p-4">
+                              {subjectsData.filter(
+                                (s) => s.student_id === student.id
+                              ).length > 0 ? (
+                                <div className="space-y-4">
+                                  {subjectsData
+                                    .filter((s) => s.student_id === student.id)
+                                    .map((subject) => (
+                                      <div
+                                        key={subject.id}
+                                        className="flex justify-between items-center p-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg border border-gray-100 dark:border-gray-700"
+                                      >
+                                        <div className="flex-1 min-w-0">
+                                          <p className="font-medium text-gray-900 dark:text-white truncate">
+                                            {subject.name} ({subject.code})
+                                          </p>
+                                          <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                                            Instructor: {subject.instructor}
+                                          </p>
+                                          {subject.grade && (
+                                            <p className="text-sm mt-1">
+                                              Grade:{" "}
+                                              <span className="font-semibold text-blue-600 dark:text-blue-400">
+                                                {subject.grade}
+                                              </span>
+                                            </p>
+                                          )}
+                                        </div>
+
+                                        <div className="flex space-x-2 ml-4">
+                                          <button
+                                            onClick={() =>
+                                              handleAddGradeClick(
+                                                subject.subject_id,
+                                                student.id
+                                              )
+                                            }
+                                            className="px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors"
+                                          >
+                                            {subject.grade
+                                              ? "Edit Grade"
+                                              : "Add Grade"}
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                </div>
+                              ) : (
+                                <div className="text-center py-6">
+                                  <p className="text-gray-500 dark:text-gray-400 text-sm">
+                                    No enrolled subjects found
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Grade Input Modal */}
+                            <GradeInputModal
+                              isOpen={isModalOpen}
+                              onClose={() => setIsModalOpen(false)}
+                              onSubmit={handleGradeSubmit}
+                              subjectName={currentSubject?.name || ""}
+                            />
+                          </div>
                         </td>
                       </tr>
                     )}
@@ -507,3 +681,60 @@ const Students: React.FC = () => {
 };
 
 export default Students;
+interface GradeInputModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (grade: string) => void;
+  subjectName: string;
+}
+const GradeInputModal = ({
+  isOpen,
+  onClose,
+  onSubmit,
+  subjectName,
+}: GradeInputModalProps) => {
+  const [grade, setGrade] = useState("");
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+      <div className="w-full max-w-md rounded bg-white dark:bg-gray-800 p-6 shadow-lg">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+          Add Grade for {subjectName}
+        </h2>
+
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Grade
+          </label>
+          <input
+            type="number"
+            value={grade}
+            onChange={(e) => setGrade(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white"
+            placeholder="Enter grade (0-100)"
+          />
+        </div>
+
+        <div className="mt-6 flex justify-end space-x-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => {
+              onSubmit(grade);
+              onClose();
+            }}
+            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md"
+          >
+            Submit Grade
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};

@@ -20,7 +20,7 @@ interface SupportRequest {
   email: string;
   subject: string;
   message: string;
-  status?: "open" | "in_progress" | "resolved";
+  status?: "in_progress" | "resolved";
   created_at?: string;
   user_id?: string;
 }
@@ -114,7 +114,7 @@ const Support: React.FC = () => {
           {
             ...contactForm,
             user_id: user?.id,
-            status: "open",
+            status: "in_progress",
           },
         ])
         .select();

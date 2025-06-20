@@ -324,15 +324,18 @@ const SupportAdmin: React.FC = () => {
                       >
                         View
                       </button>
-                      <button
-                        onClick={() => {
-                          setResponseMode(true);
-                          setSelectedTicket(ticket);
-                        }}
-                        className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors"
-                      >
-                        Resolve
-                      </button>
+                      {ticket.status !== "in_progress" || (
+                        <button
+                          onClick={() => {
+                            setResponseMode(true);
+                            setSelectedTicket(ticket);
+                            console.log(ticket);
+                          }}
+                          className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors"
+                        >
+                          Resolve
+                        </button>
+                      )}
                       <button
                         onClick={() => {
                           handleDelete(ticket.id);
@@ -422,7 +425,10 @@ const SupportAdmin: React.FC = () => {
                   </div>
                 </div>
 
-                {selectedTicket.status === "in_progress" && responseMode && (
+                {/* {(selectedTicket.status === "in_progress" ||
+                  selectedTicket.status === "resolved") &&
+                  responseMode && ( */}
+                <div>
                   <div>
                     <label
                       htmlFor="response"
@@ -433,12 +439,21 @@ const SupportAdmin: React.FC = () => {
                     <textarea
                       id="response"
                       rows={4}
-                      value={responseText}
+                      value={
+                        selectedTicket.response
+                          ? selectedTicket.response
+                          : responseText
+                      }
                       onChange={(e) => setResponseText(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
                       placeholder="Enter your response..."
+                      disabled={
+                        selectedTicket.status === "resolved" || !responseMode
+                      }
                     />
+                  </div>
 
+                  {selectedTicket.status === "in_progress" && responseMode && (
                     <div className="flex justify-end space-x-3 pt-4">
                       <button
                         type="button"
@@ -467,8 +482,9 @@ const SupportAdmin: React.FC = () => {
                         Resolve
                       </button>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
+                {/* )} */}
               </div>
             </div>
           </div>

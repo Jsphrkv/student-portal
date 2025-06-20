@@ -315,6 +315,7 @@ const AdminDashboard: React.FC = () => {
                 axisLine={false}
                 tickLine={false}
                 tick={{ fill: "#9CA3AF" }}
+                ticks={[0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 30]}
               />
               <YAxis
                 dataKey="name"
